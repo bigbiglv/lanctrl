@@ -1,12 +1,10 @@
 <script setup lang="ts">
 
 const menuItems = [
-  { path: '/', label: '控制面板', icon: '◱' },
-  { path: '/devices', label: '授权设备', icon: '💻' },
-  { path: '/tasks', label: '定时任务', icon: '⏱' },
-  { path: '/share', label: '共享目录', icon: '📁' },
-  { path: '/logs', label: '日志审计', icon: '📋' },
-  { path: '/settings', label: '系统设置', icon: '⚙' },
+  { path: '/', label: '控制台', icon: '◱' },
+  { path: '/pending-tasks', label: '待处理任务', icon: '⏱' },
+  { path: '/task-history', label: '任务记录', icon: '📋' },
+  { path: '/connected-devices', label: '已连接设备', icon: '💻' },
 ]
 </script>
 
@@ -24,7 +22,7 @@ const menuItems = [
         :key="item.path" 
         :to="item.path"
         class="nav-item"
-        active-class="active"
+        exact-active-class="active"
       >
         <span class="icon">{{ item.icon }}</span>
         <span class="label">{{ item.label }}</span>

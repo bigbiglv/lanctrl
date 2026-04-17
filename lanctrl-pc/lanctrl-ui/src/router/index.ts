@@ -11,38 +11,26 @@ const router = createRouter({
         {
           path: '',
           name: 'Dashboard',
-          component: () => import('../views/DashboardView.vue'),
-          meta: { title: '控制面板' }
+          component: () => import('../views/dashboard/index.vue'),
+          meta: { title: '控制台' }
         },
         {
-          path: 'devices',
-          name: 'Devices',
-          component: () => import('../views/DevicesView.vue'),
-          meta: { title: '授权设备' }
+          path: 'pending-tasks',
+          name: 'PendingTasks',
+          component: () => import('../views/pending-tasks/index.vue'),
+          meta: { title: '待处理任务' }
         },
         {
-          path: 'tasks',
-          name: 'Tasks',
-          component: () => import('../views/TasksView.vue'),
-          meta: { title: '定时任务' }
+          path: 'task-history',
+          name: 'TaskHistory',
+          component: () => import('../views/task-history/index.vue'),
+          meta: { title: '任务记录' }
         },
         {
-          path: 'share',
-          name: 'Share',
-          component: () => import('../views/ShareView.vue'),
-          meta: { title: '共享目录' }
-        },
-        {
-          path: 'logs',
-          name: 'Logs',
-          component: () => import('../views/LogsView.vue'),
-          meta: { title: '日志审计' }
-        },
-        {
-          path: 'settings',
-          name: 'Settings',
-          component: () => import('../views/SettingsView.vue'),
-          meta: { title: '系统设置' }
+          path: 'connected-devices',
+          name: 'ConnectedDevices',
+          component: () => import('../views/connected-devices/index.vue'),
+          meta: { title: '已连接设备' }
         }
       ]
     }
