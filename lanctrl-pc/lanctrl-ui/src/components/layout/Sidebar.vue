@@ -4,7 +4,7 @@ const menuItems = [
   { path: '/', label: '控制台', icon: '◱' },
   { path: '/pending-tasks', label: '待处理任务', icon: '⏱' },
   { path: '/task-history', label: '任务记录', icon: '📋' },
-  { path: '/connected-devices', label: '已连接设备', icon: '💻' },
+  { path: '/connected-devices', label: '设备', icon: '💻' },
 ]
 </script>
 

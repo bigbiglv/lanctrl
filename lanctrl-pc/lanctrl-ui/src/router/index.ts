@@ -30,7 +30,7 @@ const router = createRouter({
           path: 'connected-devices',
           name: 'ConnectedDevices',
           component: () => import('../views/connected-devices/index.vue'),
-          meta: { title: '已连接设备' }
+          meta: { title: '设备' }
         }
       ]
     }
