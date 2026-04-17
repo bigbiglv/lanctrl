@@ -1,6 +1,6 @@
 # LanCtrl PC Project Guidelines
 
-当前位于 `lanctrl_pc` 目录，这里是 PC 控制系统的代码核心库，采用了**单后台服务 + Tauri独立终端模型**设计。
+当前位于 `lanctrl-pc` 目录，这里是 PC 控制系统的代码核心库，采用了**单后台服务 + Tauri独立终端模型**设计。
 
 ## 架构组成
 - `lanctrl-service` / `lanctrl-*`: 多个纯由 Rust 构建的核心后端模块库，处理网络通信、系统状态控制的逻辑。

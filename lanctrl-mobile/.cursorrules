@@ -1,6 +1,6 @@
 # LanCtrl Mobile Project Guidelines
 
-当前位于 `lanctrl_mobile` 目录，这里是基于 Flutter 研发的移动端控制 App。它需要良好的业务分层与高度美观的数据组织。
+当前位于 `lanctrl-mobile` 目录，这里是基于 Flutter 研发的移动端控制 App。它需要良好的业务分层与高度美观的数据组织。
 
 ## Flutter 核心栈规范
 1. **架构模式**：必须采用 `feature-first` + `clean architecture` （划分 presentation / application / domain / data）。
