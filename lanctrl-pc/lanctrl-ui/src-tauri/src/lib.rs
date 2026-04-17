@@ -1,6 +1,14 @@
+mod peripherals;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .manage(peripherals::init_state())
+    .invoke_handler(tauri::generate_handler![
+        peripherals::get_peripheral_devices,
+        peripherals::start_device_watch,
+        peripherals::stop_device_watch
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

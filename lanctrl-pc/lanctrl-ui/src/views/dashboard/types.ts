@@ -1,3 +1,6 @@
-﻿export interface dashboardData {
-  id: string
+export interface PeripheralDevice {
+  id: string;
+  classType: string;
+  name: string;
+  status: string;
 }
