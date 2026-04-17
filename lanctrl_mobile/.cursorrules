@@ -1,0 +1,16 @@
+# LanCtrl Mobile Project Guidelines
+
+当前位于 `lanctrl_mobile` 目录，这里是基于 Flutter 研发的移动端控制 App。它需要良好的业务分层与高度美观的数据组织。
+
+## Flutter 核心栈规范
+1. **架构模式**：必须采用 `feature-first` + `clean architecture` （划分 presentation / application / domain / data）。
+2. **状态路由管理**：
+    - **严格禁用 GetX**。
+    - 状态管理必须采用 `Riverpod`（尤其是 `flutter_riverpod` + `riverpod_generator`）。所有的页面都只关心 UI State。
+    - 路由采用 `go_router`。
+3. **模型与网络**：使用 `freezed` 以及 `json_serializable` 做不可变数据模型。使用 `dio` 统一接管 REST 请求。
+4. **组件拆分解耦**：页面不要做成超大的 StatefulWidget，不把页面视图、状态管理、接口请求全挤在同一个文件中。必须严格遵循逻辑与表现隔离。
+
+## UI / UX 指南
+- 整体以“控制中心”理念设计界面。所有的交互行为（例如网络状态改变、任务危险提示等）都需要有优质的组件反馈（加载态、禁用态及交互动画等）。
+- 禁止硬编码具体的颜色、间距等散落数据到界面中（需要提取到基于 `ThemeExtension` 的统一系统 token 内管理以方便未来的改版）。
