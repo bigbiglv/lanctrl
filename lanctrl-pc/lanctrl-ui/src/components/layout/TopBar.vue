@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 
 const route = useRoute()
 const pageTitle = computed(() => route.meta.title || 'LanCtrl')
+
+const isDark = ref(false)
+
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+}
+
+onMounted(() => {
+  // 读取当前设置的系统级别状态，如果没通过 JS 操作过默认读取 false (light)
+  const theme = document.documentElement.getAttribute('data-theme')
+  isDark.value = theme === 'dark'
+})
 </script>
 
 <template>
@@ -14,7 +27,9 @@ const pageTitle = computed(() => route.meta.title || 'LanCtrl')
       <span class="current">{{ pageTitle }}</span>
     </div>
     <div class="user-actions">
-      <button class="icon-btn">🔔</button>
+      <button class="icon-btn theme-toggle" @click="toggleTheme" :title="isDark ? '切换到浅色模式' : '切换到深色模式'">
+        {{ isDark ? '🌙' : '🌞' }}
+      </button>
     </div>
   </header>
 </template>

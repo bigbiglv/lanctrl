@@ -38,8 +38,8 @@ $themes: (
   ),
   
   "dark": (
-    // 玻璃态暗色背景 (要求高颜值高级质感)
-    --bg-gradient: linear-gradient(135deg, map.get(v.$colors, gray, 900) 0%, map.get(v.$colors, primary, dark) 100%),
+    // 字面意义上的纯粹暗黑风格背景
+    --bg-gradient: linear-gradient(135deg, map.get(v.$colors, gray, 950) 0%, map.get(v.$colors, absolute, black) 100%),
     --glass-bg: rgba(255, 255, 255, 0.03),
     --glass-border: rgba(255, 255, 255, 0.08),
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3),
@@ -76,8 +76,8 @@ $themes: (
 
 :root {
   @include apply-theme(map.get($themes, "default"));
-  // 默认生效 dark 玻璃态主题
-  @include apply-theme(map.get($themes, "dark"));
+  // 默认生效 light 浅色主题
+  @include apply-theme(map.get($themes, "light"));
 }
 
 [data-theme="dark"] {
