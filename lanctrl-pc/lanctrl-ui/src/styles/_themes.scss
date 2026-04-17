@@ -1,0 +1,88 @@
+@use 'variables' as v;
+
+// Map out the theme configuration mapping SCSS variables to CSS Custom Properties
+$themes: (
+  "default": (
+    --font-family: #{map-get(v.$typography, font-family)},
+    
+    // 注入圆角
+    --radius-sm: map-get(v.$radii, sm),
+    --radius-md: map-get(v.$radii, md),
+    --radius-lg: map-get(v.$radii, lg),
+    --radius-xl: map-get(v.$radii, xl),
+    --radius-pill: map-get(v.$radii, pill),
+    
+    // 注入过渡时长
+    --transition-fast: map-get(v.$transitions, fast),
+    --transition-normal: map-get(v.$transitions, normal),
+    --transition-slow: map-get(v.$transitions, slow),
+    
+    // 注入核心品牌色
+    --color-primary: map-get(v.$colors, primary, base),
+    --color-primary-light: map-get(v.$colors, primary, light),
+    --color-primary-dark: map-get(v.$colors, primary, dark),
+    
+    // 注入系统反馈色
+    --color-success: map-get(v.$colors, system, success),
+    --color-danger: map-get(v.$colors, system, danger),
+    --color-warning: map-get(v.$colors, system, warning),
+    --color-info: map-get(v.$colors, system, info),
+    
+    // 注入灰度
+    --color-gray-50: map-get(v.$colors, gray, 50),
+    --color-gray-400: map-get(v.$colors, gray, 400),
+    --color-gray-900: map-get(v.$colors, gray, 900),
+    --color-white: map-get(v.$colors, absolute, white),
+    --color-black: map-get(v.$colors, absolute, black),
+  ),
+  
+  "dark": (
+    // 玻璃态暗色背景 (要求高颜值高级质感)
+    --bg-gradient: linear-gradient(135deg, map-get(v.$colors, gray, 900) 0%, map-get(v.$colors, primary, dark) 100%),
+    --glass-bg: rgba(255, 255, 255, 0.03),
+    --glass-border: rgba(255, 255, 255, 0.08),
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3),
+    
+    --text-main: map-get(v.$colors, gray, 50),
+    --text-muted: map-get(v.$colors, gray, 400),
+    --text-inverse: map-get(v.$colors, gray, 900),
+    
+    --border-color: rgba(255, 255, 255, 0.1),
+    --panel-hover-bg: rgba(255, 255, 255, 0.05),
+  ),
+  
+  "light": (
+    // 浅色主题衍生接口，未来扩展用
+    --bg-gradient: linear-gradient(135deg, map-get(v.$colors, gray, 50) 0%, map-get(v.$colors, gray, 200) 100%),
+    --glass-bg: rgba(255, 255, 255, 0.6),
+    --glass-border: rgba(255, 255, 255, 0.4),
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05),
+    
+    --text-main: map-get(v.$colors, gray, 900),
+    --text-muted: map-get(v.$colors, gray, 600),
+    --text-inverse: map-get(v.$colors, gray, 50),
+    
+    --border-color: rgba(0, 0, 0, 0.1),
+    --panel-hover-bg: rgba(0, 0, 0, 0.03),
+  )
+);
+
+@mixin apply-theme($theme-map) {
+  @each $key, $value in $theme-map {
+    #{$key}: #{$value};
+  }
+}
+
+:root {
+  @include apply-theme(map-get($themes, "default"));
+  // 默认生效 dark 玻璃态主题
+  @include apply-theme(map-get($themes, "dark"));
+}
+
+[data-theme="dark"] {
+  @include apply-theme(map-get($themes, "dark"));
+}
+
+[data-theme="light"] {
+  @include apply-theme(map-get($themes, "light"));
+}

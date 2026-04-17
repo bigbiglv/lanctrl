@@ -9,8 +9,9 @@
 ## 前端技术规范 (lanctrl-ui)
 1. **统一技术栈**：严格采用 Vue 3 (Composition API) + `<script setup>` + TypeScript 构建，状态采用纯净响应式实现。
 2. **社区规范**：严格遵循前端优质实践，所有的模块必须剥离干净数据与视图边界，不滥用 ad-hoc 的全局状态。
-3. **视觉标准**：本界面是一个带有质感和**玻璃态（Glassmorphism）设计语言**的“PC 控制台页面”，禁止产生丑陋、无风格的最简临时 UI。
+3. **视觉标准**：本界面是一个带有质感和**玻璃态（Glassmorphism）设计语言**的“PC 控制台页面”，禁止产生丑陋、无最简临时 UI。
 4. **与 Rust 通信**：仅通过 `@tauri-apps/api` 向后端发起请求调用。
+5. **极其重要的主题规范**：我们已经工程化了一套以 `#8248f1` 为主的双轨 SCSS/CSS变量主题机制。在编写任何 Vue UI 或样式时，**绝对禁止写死使用 HEX 或 RGB 常量代码**。所有的颜色、圆角和动效时长必须采用我们在 `[data-theme]` 中定义好的全局 CSS Variables（例如 `var(--color-primary)`, `var(--text-main)`, `var(--radius-lg)` 等），以支持无缝皮肤扩展！
 
 ## Rust 后端规范 (lanctrl-* crates)
 1. **高性能与低损耗**：空闲 CPU 占用必须接近 0。常驻轻量后台。
