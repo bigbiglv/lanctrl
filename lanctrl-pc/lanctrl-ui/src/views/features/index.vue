@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import FeatureActionCard from './components/FeatureActionCard.vue'
-import FeatureRangeCard from './components/FeatureRangeCard.vue'
+import ActionCard from './components/ActionCard.vue'
+import RangeCard from './components/RangeCard.vue'
 import type {
   ActionFeatureDefinition,
   FeatureCommand,
@@ -136,7 +136,7 @@ onMounted(loadPageData)
         </div>
 
         <div class="action-grid">
-          <FeatureActionCard
+          <ActionCard
             v-for="feature in actionFeatures"
             :key="feature.featureKey"
             :feature="feature"
@@ -152,7 +152,7 @@ onMounted(loadPageData)
           <p>音量使用 0 到 100 的绝对值，后续移动端可以直接复用同一个参数约定。</p>
         </div>
 
-        <FeatureRangeCard
+        <RangeCard
           :feature="volumeFeature"
           :value="currentVolume"
           :pending="activeFeatureKey === volumeFeature.featureKey"

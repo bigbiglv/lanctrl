@@ -2,20 +2,23 @@
 import { computed } from 'vue'
 import type { RangeFeatureDefinition } from '../types'
 
-const props = defineProps<{
+interface Props {
   feature: RangeFeatureDefinition
   value: number
   pending: boolean
   refreshing: boolean
-}>()
+}
 
-const emit = defineEmits<{
+interface Emits {
   'update:value': [value: number]
   apply: [feature: RangeFeatureDefinition]
   refresh: []
-}>()
+}
 
-const displayValue = computed(() => `${props.value}${props.feature.control.unit}`)
+const { feature, value, pending, refreshing } = defineProps<Props>()
+const emit = defineEmits<Emits>()
+
+const displayValue = computed(() => `${value}${feature.control.unit}`)
 </script>
 
 <template>

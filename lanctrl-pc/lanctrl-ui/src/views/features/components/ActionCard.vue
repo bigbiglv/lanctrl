@@ -1,16 +1,20 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ActionFeatureDefinition } from '../types'
 
-const props = defineProps<{
+interface Props {
   feature: ActionFeatureDefinition
   pending: boolean
-}>()
+}
 
-const emit = defineEmits<{
+interface Emits {
   execute: [feature: ActionFeatureDefinition]
-}>()
+}
 
-const toneClass = props.feature.control.tone === 'danger' ? 'danger' : 'primary'
+const { feature, pending } = defineProps<Props>()
+const emit = defineEmits<Emits>()
+
+const toneClass = computed(() => feature.control.tone === 'danger' ? 'danger' : 'primary')
 </script>
 
 <template>
