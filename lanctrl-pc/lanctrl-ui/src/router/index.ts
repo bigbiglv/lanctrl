@@ -12,29 +12,35 @@ const router = createRouter({
           path: '',
           name: 'Dashboard',
           component: () => import('../views/dashboard/index.vue'),
-          meta: { title: '控制台' }
+          meta: { title: '控制台' },
         },
         {
           path: 'pending-tasks',
           name: 'PendingTasks',
           component: () => import('../views/pending-tasks/index.vue'),
-          meta: { title: '待处理任务' }
+          meta: { title: '待处理任务' },
         },
         {
           path: 'task-history',
           name: 'TaskHistory',
           component: () => import('../views/task-history/index.vue'),
-          meta: { title: '任务记录' }
+          meta: { title: '任务记录' },
         },
         {
           path: 'connected-devices',
           name: 'ConnectedDevices',
           component: () => import('../views/connected-devices/index.vue'),
-          meta: { title: '设备' }
-        }
-      ]
-    }
-  ]
+          meta: { title: '设备' },
+        },
+        {
+          path: 'features',
+          name: 'Features',
+          component: () => import('../views/features/index.vue'),
+          meta: { title: '功能' },
+        },
+      ],
+    },
+  ],
 })
 
 export default router

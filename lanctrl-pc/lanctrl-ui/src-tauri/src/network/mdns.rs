@@ -15,13 +15,14 @@ pub fn start_mdns(device_id: &str, device_name: &str, port: u16) -> Result<Servi
         service_type,
         instance_name,
         &host_name,
-        "0.0.0.0", // 依靠路由多组播自动抓包网卡地址
+        "", // 传空字符串在 mdns-sd 中会自动选择合适的接口进行多播广播
         port,
         Some(properties),
     )?;
-    
+
     mdns.register(my_service)?;
+    println!("Started mDNS broadcast: {} on port {}", service_type, port);
     log::info!("Started mDNS broadcast: {} on port {}", service_type, port);
-    
+
     Ok(mdns)
 }

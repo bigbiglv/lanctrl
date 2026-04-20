@@ -30,7 +30,9 @@ class DiscoveryService {
     _discovery = await nsd_pkg.startDiscovery('_lanctrl._tcp', ipLookupType: nsd_pkg.IpLookupType.v4);
     _discovery!.addListener(() {
       _foundDevices = [];
+      print('NSD Discovery listener triggered, found ${_discovery!.services.length} services');
       for (var service in _discovery!.services) {
+        print('Found service: ${service.name}, type: ${service.type}, host: ${service.host}, port: ${service.port}');
         if (service.txt != null && service.txt!.containsKey('deviceId')) {
           try {
             // TXT values are commonly Uint8List in nsd

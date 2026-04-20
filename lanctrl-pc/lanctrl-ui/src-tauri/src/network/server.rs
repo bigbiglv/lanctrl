@@ -1,17 +1,25 @@
-use axum::{routing::post, Router, Json, extract::{State, ConnectInfo}};
+use axum::{
+    extract::{ConnectInfo, State},
+    routing::post,
+    Json, Router,
+};
+use lanctrl_service::{
+    execute_feature_command, get_feature_groups, get_feature_snapshot, FeatureCommand,
+    FeatureExecutionResult, FeatureGroup, FeatureSnapshot,
+};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap as StdHashMap;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
-use tower_http::cors::{Any, CorsLayer};
 use tauri::AppHandle;
 use tauri::Emitter;
-use lazy_static::lazy_static;
-use std::collections::HashMap as StdHashMap;
 use tokio::sync::oneshot;
+use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
-use crate::store::{GLOBAL_STORE, PairedClient};
+use crate::store::{PairedClient, GLOBAL_STORE};
 
 lazy_static! {
     pub static ref PENDING_REQUESTS: Arc<Mutex<StdHashMap<String, oneshot::Sender<bool>>>> = Arc::new(Mutex::new(StdHashMap::new()));
@@ -37,13 +45,15 @@ pub async fn start_server(port: u16, tauri_app: AppHandle) {
         .route("/auth/verify", post(auth_verify))
         .route("/auth/connect", post(auth_connect))
         .route("/auth/disconnect", post(auth_disconnect))
+        .route("/features/catalog", post(features_catalog))
+        .route("/features/execute", post(features_execute))
         .layer(cors)
         .with_state(state)
         .into_make_service_with_connect_info::<SocketAddr>();
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     log::info!("Axum server listening on {}", addr);
-    
+
     if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
         tokio::spawn(async move {
             if let Err(e) = axum::serve(listener, app).await {
@@ -75,9 +85,8 @@ async fn auth_pair(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<PairRequestInfo>,
 ) -> Json<PairResponse> {
-    
     let (tx, rx) = oneshot::channel();
-    
+
     {
         let mut map = PENDING_REQUESTS.lock().unwrap();
         map.insert(payload.client_id.clone(), tx);
@@ -98,11 +107,11 @@ async fn auth_pair(
         Ok(allowed) => {
             if allowed {
                 let token = Uuid::new_v4().to_string();
-                
+
                 let client = PairedClient {
                     client_id: payload.client_id,
                     client_name: payload.client_name,
-                    token_hash: token.clone(), 
+                    token_hash: token.clone(),
                     last_seen_at: 0,
                     last_ip: Some(addr.ip().to_string()),
                 };
@@ -112,7 +121,7 @@ async fn auth_pair(
                     s.add_paired_client(client);
                     (s.data.device_id.clone(), s.data.device_name.clone())
                 };
-                
+
                 Json(PairResponse {
                     success: true,
                     token: Some(token),
@@ -129,16 +138,14 @@ async fn auth_pair(
                     device_name: None,
                 })
             }
-        },
-        Err(_) => {
-            Json(PairResponse {
-                success: false,
-                token: None,
-                msg: "Pairing request timed out or cancelled".into(),
-                device_id: None,
-                device_name: None,
-            })
         }
+        Err(_) => Json(PairResponse {
+            success: false,
+            token: None,
+            msg: "Pairing request timed out or cancelled".into(),
+            device_id: None,
+            device_name: None,
+        }),
     }
 }
 
@@ -154,6 +161,11 @@ pub struct VerifyResponse {
     pub msg: String,
 }
 
+fn is_client_authorized(client_id: &str, token: &str) -> bool {
+    let store = GLOBAL_STORE.lock().unwrap();
+    store.is_client_paired(client_id, token)
+}
+
 async fn auth_verify(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<VerifyRequest>,
@@ -163,7 +175,12 @@ async fn auth_verify(
         let mut store = GLOBAL_STORE.lock().unwrap();
         is_valid = store.is_client_paired(&payload.client_id, &payload.token);
         if is_valid {
-            if let Some(client) = store.data.paired_clients.values_mut().find(|c| c.client_id == payload.client_id) {
+            if let Some(client) = store
+                .data
+                .paired_clients
+                .values_mut()
+                .find(|c| c.client_id == payload.client_id)
+            {
                 client.last_ip = Some(addr.ip().to_string());
             }
             let _ = store.save();
@@ -172,7 +189,12 @@ async fn auth_verify(
 
     Json(VerifyResponse {
         success: is_valid,
-        msg: if is_valid { "Verified" } else { "Invalid or missing token" }.into()
+        msg: if is_valid {
+            "Verified"
+        } else {
+            "Invalid or missing token"
+        }
+        .into(),
     })
 }
 
@@ -198,22 +220,114 @@ async fn auth_connect(
     if !store.is_client_paired(&payload.client_id, &payload.token) {
         return Json(serde_json::json!({ "success": false, "msg": "Unauthorized" }));
     }
-    let client_name = store.data.paired_clients
+    let client_name = store
+        .data
+        .paired_clients
         .values()
         .find(|c| c.client_id == payload.client_id)
         .map(|c| c.client_name.clone())
         .unwrap_or_default();
     drop(store);
 
-    ACTIVE_CONNECTIONS.lock().unwrap().insert(payload.client_id.clone());
+    ACTIVE_CONNECTIONS
+        .lock()
+        .unwrap()
+        .insert(payload.client_id.clone());
 
     // 发送 Tauri 事件通知 Vue 前端
-    let _ = state.tauri_app.emit("device_connected", SessionEvent {
-        client_id: payload.client_id,
-        client_name,
-    });
+    let _ = state.tauri_app.emit(
+        "device_connected",
+        SessionEvent {
+            client_id: payload.client_id,
+            client_name,
+        },
+    );
 
     Json(serde_json::json!({ "success": true }))
+}
+
+#[derive(Deserialize)]
+pub struct MobileFeatureCatalogRequest {
+    pub client_id: String,
+    pub token: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureCatalogResponse {
+    pub success: bool,
+    pub msg: String,
+    pub groups: Vec<FeatureGroup>,
+    pub snapshot: Option<FeatureSnapshot>,
+}
+
+#[derive(Deserialize)]
+pub struct MobileFeatureExecuteRequest {
+    pub client_id: String,
+    pub token: String,
+    #[serde(flatten)]
+    pub command: FeatureCommand,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureExecuteResponse {
+    pub success: bool,
+    pub msg: String,
+    pub result: Option<FeatureExecutionResult>,
+}
+
+async fn features_catalog(
+    Json(payload): Json<MobileFeatureCatalogRequest>,
+) -> Json<FeatureCatalogResponse> {
+    if !is_client_authorized(&payload.client_id, &payload.token) {
+        return Json(FeatureCatalogResponse {
+            success: false,
+            msg: "Unauthorized".into(),
+            groups: vec![],
+            snapshot: None,
+        });
+    }
+
+    match get_feature_snapshot() {
+        Ok(snapshot) => Json(FeatureCatalogResponse {
+            success: true,
+            msg: "OK".into(),
+            groups: get_feature_groups(),
+            snapshot: Some(snapshot),
+        }),
+        Err(error) => Json(FeatureCatalogResponse {
+            success: false,
+            msg: error.to_string(),
+            groups: vec![],
+            snapshot: None,
+        }),
+    }
+}
+
+async fn features_execute(
+    Json(payload): Json<MobileFeatureExecuteRequest>,
+) -> Json<FeatureExecuteResponse> {
+    if !is_client_authorized(&payload.client_id, &payload.token) {
+        return Json(FeatureExecuteResponse {
+            success: false,
+            msg: "Unauthorized".into(),
+            result: None,
+        });
+    }
+
+    match execute_feature_command(payload.command) {
+        Ok(result) => Json(FeatureExecuteResponse {
+            success: true,
+            msg: result.message.clone(),
+            result: Some(result),
+        }),
+        Err(error) => Json(FeatureExecuteResponse {
+            success: false,
+            msg: error.to_string(),
+            result: None,
+        }),
+    }
 }
 
 async fn auth_disconnect(
@@ -222,19 +336,27 @@ async fn auth_disconnect(
 ) -> Json<serde_json::Value> {
     let store = GLOBAL_STORE.lock().unwrap();
     // 即使 Token 失效也允许断开（防止误删后残留状态）
-    let client_name = store.data.paired_clients
+    let client_name = store
+        .data
+        .paired_clients
         .values()
         .find(|c| c.client_id == payload.client_id)
         .map(|c| c.client_name.clone())
         .unwrap_or_else(|| "未知设备".to_string());
     drop(store);
 
-    ACTIVE_CONNECTIONS.lock().unwrap().remove(&payload.client_id);
+    ACTIVE_CONNECTIONS
+        .lock()
+        .unwrap()
+        .remove(&payload.client_id);
 
-    let _ = state.tauri_app.emit("device_disconnected", SessionEvent {
-        client_id: payload.client_id,
-        client_name,
-    });
+    let _ = state.tauri_app.emit(
+        "device_disconnected",
+        SessionEvent {
+            client_id: payload.client_id,
+            client_name,
+        },
+    );
 
     Json(serde_json::json!({ "success": true }))
 }
@@ -254,13 +376,18 @@ pub struct ClientInfo {
 pub fn get_clients_with_status() -> Vec<ClientInfo> {
     let store = GLOBAL_STORE.lock().unwrap();
     let active = ACTIVE_CONNECTIONS.lock().unwrap();
-    store.data.paired_clients.values().map(|c| ClientInfo {
-        client_id: c.client_id.clone(),
-        client_name: c.client_name.clone(),
-        last_seen_at: c.last_seen_at,
-        last_ip: c.last_ip.clone(),
-        is_connected: active.contains(&c.client_id),
-    }).collect()
+    store
+        .data
+        .paired_clients
+        .values()
+        .map(|c| ClientInfo {
+            client_id: c.client_id.clone(),
+            client_name: c.client_name.clone(),
+            last_seen_at: c.last_seen_at,
+            last_ip: c.last_ip.clone(),
+            is_connected: active.contains(&c.client_id),
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -289,5 +416,3 @@ pub async fn notify_mobile_disconnect(ip: String) -> Result<(), String> {
     let _ = client.post(&url).send().await;
     Ok(())
 }
-
-

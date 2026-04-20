@@ -1,10 +1,10 @@
 <script setup lang="ts">
-
 const menuItems = [
-  { path: '/', label: '控制台', icon: '◱' },
-  { path: '/pending-tasks', label: '待处理任务', icon: '⏱' },
-  { path: '/task-history', label: '任务记录', icon: '📋' },
-  { path: '/connected-devices', label: '设备', icon: '💻' },
+  { path: '/', label: '控制台', icon: '●' },
+  { path: '/pending-tasks', label: '待处理任务', icon: '◔' },
+  { path: '/task-history', label: '任务记录', icon: '◫' },
+  { path: '/connected-devices', label: '设备', icon: '⌁' },
+  { path: '/features', label: '功能', icon: '⌘' },
 ]
 </script>
 
@@ -15,11 +15,11 @@ const menuItems = [
       <h1>LanCtrl</h1>
       <span class="version">v1.0</span>
     </div>
-    
+
     <nav class="nav-menu">
       <router-link
-        v-for="item in menuItems" 
-        :key="item.path" 
+        v-for="item in menuItems"
+        :key="item.path"
         :to="item.path"
         class="nav-item"
         exact-active-class="active"
@@ -28,7 +28,7 @@ const menuItems = [
         <span class="label">{{ item.label }}</span>
       </router-link>
     </nav>
-    
+
     <div class="sidebar-footer">
       <div class="status-indicator online">
         <span class="dot"></span>服务运行中
@@ -50,8 +50,15 @@ const menuItems = [
   &::before {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0; height: 100px;
-    background: radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 15%, transparent), transparent);
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--color-primary) 15%, transparent),
+      transparent
+    );
     pointer-events: none;
   }
 }
@@ -107,7 +114,10 @@ const menuItems = [
     &::before {
       content: '';
       position: absolute;
-      left: 0; top: 0; bottom: 0; width: 4px;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
       background: var(--color-primary);
       transform: scaleY(0);
       transition: transform var(--transition-fast);
@@ -127,7 +137,11 @@ const menuItems = [
 
     &.active {
       color: var(--text-main);
-      background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 10%, transparent) 0%, transparent 100%);
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-primary) 10%, transparent) 0%,
+        transparent 100%
+      );
 
       &::before {
         transform: scaleY(1);
@@ -171,8 +185,19 @@ const menuItems = [
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 40%, transparent); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px transparent; }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 transparent; }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 40%, transparent);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 </style>
