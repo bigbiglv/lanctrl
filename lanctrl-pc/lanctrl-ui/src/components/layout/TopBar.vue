@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
+import MorphIcon from '../common/MorphIcon.vue'
+import { mdiWeatherSunny, mdiWeatherNight } from '@mdi/js'
 
 const route = useRoute()
 const pageTitle = computed(() => route.meta.title || 'LanCtrl')
 
 const isDark = ref(false)
+
+// 使用 @mdi/js 提供的路径字符串直接作为动画目标
+const themeIconPaths = [mdiWeatherSunny, mdiWeatherNight]
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
@@ -28,7 +33,11 @@ onMounted(() => {
     </div>
     <div class="user-actions">
       <button class="icon-btn theme-toggle" @click="toggleTheme" :title="isDark ? '切换到浅色模式' : '切换到深色模式'">
-        {{ isDark ? '🌙' : '🌞' }}
+        <MorphIcon
+          :paths="themeIconPaths"
+          :activeIndex="isDark ? 1 : 0"
+          size="1.25em"
+        />
       </button>
     </div>
   </header>
