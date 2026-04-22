@@ -35,6 +35,14 @@ $themes: (
     --color-gray-900: map.get(v.$colors, gray, 900),
     --color-white: map.get(v.$colors, absolute, white),
     --color-black: map.get(v.$colors, absolute, black),
+
+    // 动作按钮特殊状态色 (用于渐变动画)
+    --color-action-idle: map.get(v.$colors, primary, base),
+    --color-action-running-1: #6366f1,
+    --color-action-running-2: #a855f7,
+    --color-action-terminate: map.get(v.$colors, system, danger),
+    --color-action-stopping-1: #f59e0b,
+    --color-action-stopping-2: #f97316,
   ),
   
   "dark": (

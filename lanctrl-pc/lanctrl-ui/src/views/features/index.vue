@@ -86,7 +86,58 @@ function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
   return { feature: 'restart' }
 }
 
+const testPending = ref(false)
+const testStopping = ref(false)
+let testTimer: number | null = null
+
+const testFeature: ActionFeatureDefinition = {
+  featureKey: 'test-long-run',
+  title: '交互状态测试',
+  description: '模拟一个耗时 5 秒的任务，测试按钮的“执行中”与“终止”状态切换。',
+  mobileReady: true,
+  control: {
+    type: 'action',
+    buttonText: '开始测试 (5s)',
+    tone: 'primary',
+    confirmRequired: false,
+  },
+}
+
+async function handleTestAction() {
+  testPending.value = true
+  feedback.value = '测试任务已开始，预计耗时 5 秒...'
+
+  testTimer = window.setTimeout(() => {
+    testPending.value = false
+    feedback.value = '测试任务执行完毕！'
+    testTimer = null
+  }, 5000)
+}
+
+function handleCancelTestAction() {
+  if (testTimer) {
+    clearTimeout(testTimer)
+    testTimer = null
+  }
+  
+  // 模拟终止过程耗时
+  testStopping.value = true
+  feedback.value = '正在请求终止任务...'
+
+  window.setTimeout(() => {
+    testStopping.value = false
+    testPending.value = false
+    feedback.value = '测试任务已成功终止。'
+  }, 1500)
+}
+
 async function handleAction(feature: ActionFeatureDefinition) {
+  // 处理测试卡片
+  if (feature.featureKey === 'test-long-run') {
+    handleTestAction()
+    return
+  }
+
   if (feature.control.confirmRequired) {
     const confirmed = window.confirm(`确认执行“${feature.title}”吗？该操作会立即生效。`)
     if (!confirmed) {
@@ -95,6 +146,14 @@ async function handleAction(feature: ActionFeatureDefinition) {
   }
 
   await runCommand(feature, buildActionCommand(feature))
+}
+
+function handleCancel(feature: ActionFeatureDefinition) {
+  if (feature.featureKey === 'test-long-run') {
+    handleCancelTestAction()
+  } else {
+    feedback.value = `操作“${feature.title}”不支持终止。`
+  }
 }
 
 async function handleVolumeApply(feature: RangeFeatureDefinition) {
@@ -120,8 +179,9 @@ onMounted(loadPageData)
       </div>
     </header>
 
-    <div v-if="feedback" class="feedback-banner glass-panel">
+    <div v-if="feedback" class="feedback-banner glass-panel" @click="feedback = ''">
       {{ feedback }}
+      <small style="margin-left: 1rem; opacity: 0.7">(点击关闭)</small>
     </div>
 
     <div v-if="loading" class="loading-panel glass-panel">
@@ -129,6 +189,23 @@ onMounted(loadPageData)
     </div>
 
     <template v-else>
+      <!-- 测试区域 -->
+      <section class="group-section">
+        <div class="group-head">
+          <h3>UI 组件测试</h3>
+          <p>测试按钮的三种状态：点击执行 -> 执行中 -> 终止执行（悬停时）。</p>
+        </div>
+        <div class="action-grid">
+          <ActionCard
+            :feature="testFeature"
+            :pending="testPending"
+            :stopping="testStopping"
+            @execute="handleAction"
+            @cancel="handleCancel"
+          />
+        </div>
+      </section>
+
       <section class="group-section">
         <div class="group-head">
           <h3>电源控制</h3>
@@ -142,6 +219,7 @@ onMounted(loadPageData)
             :feature="feature"
             :pending="activeFeatureKey === feature.featureKey"
             @execute="handleAction"
+            @cancel="handleCancel"
           />
         </div>
       </section>
