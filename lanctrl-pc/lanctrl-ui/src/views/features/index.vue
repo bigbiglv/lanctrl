@@ -39,7 +39,7 @@ const mockFeatureGroups: FeatureGroup[] = [
       {
         featureKey: 'shutdown',
         title: '安全关机',
-        description: '向执行层发起安全关机请求。',
+        description: '关闭设备前保存当前工作内容。',
         mobileReady: true,
         control: {
           type: 'action',
@@ -51,7 +51,7 @@ const mockFeatureGroups: FeatureGroup[] = [
       {
         featureKey: 'restart',
         title: '重新启动',
-        description: '重新启动当前桌面环境。',
+        description: '快速重启系统并恢复当前工作环境。',
         mobileReady: true,
         control: {
           type: 'action',
@@ -63,7 +63,7 @@ const mockFeatureGroups: FeatureGroup[] = [
       {
         featureKey: 'volume',
         title: '主音量',
-        description: '控制系统级主输出音量。',
+        description: '调整系统主输出音量。',
         mobileReady: true,
         control: {
           type: 'range',
@@ -92,8 +92,8 @@ let testTimer: number | null = null
 
 const testFeature: ActionFeatureDefinition = {
   featureKey: 'test-long-run',
-  title: '交互状态演示',
-  description: '模拟一个持续 5 秒的动作，验证“执行中”和“终止中”的按钮状态切换。',
+  title: '控制演示',
+  description: '演示按钮状态切换与操作反馈效果。',
   mobileReady: true,
   control: {
     type: 'action',
@@ -108,7 +108,7 @@ async function loadPageData() {
     groups.value = mockFeatureGroups
     currentVolume.value = 38
     loading.value = false
-    feedback.value = '当前处于浏览器预览模式，功能数据已切换为本地 mock。'
+    feedback.value = '演示数据已就绪，可先体验常用控制项。'
     return
   }
 
@@ -123,7 +123,7 @@ async function loadPageData() {
     groups.value = featureGroups
     currentVolume.value = snapshot.volumeLevel
   } catch (error) {
-    feedback.value = `加载功能页失败：${String(error)}`
+    feedback.value = `暂时无法载入控制项：${String(error)}`
   } finally {
     loading.value = false
   }
@@ -135,7 +135,7 @@ async function refreshSnapshot() {
     window.setTimeout(() => {
       currentVolume.value = 42
       snapshotRefreshing.value = false
-      feedback.value = '浏览器预览模式下，音量已模拟同步为 42%。'
+      feedback.value = '当前音量已刷新。'
     }, 400)
     return
   }
@@ -145,9 +145,9 @@ async function refreshSnapshot() {
   try {
     const snapshot = await invoke<FeatureSnapshot>('get_feature_snapshot')
     currentVolume.value = snapshot.volumeLevel
-    feedback.value = `当前系统音量已同步为 ${snapshot.volumeLevel}%`
+    feedback.value = `当前音量为 ${snapshot.volumeLevel}%`
   } catch (error) {
-    feedback.value = `同步音量失败：${String(error)}`
+    feedback.value = `音量刷新失败：${String(error)}`
   } finally {
     snapshotRefreshing.value = false
   }
@@ -160,8 +160,8 @@ async function runCommand(feature: FeatureDefinition, command: FeatureCommand) {
       activeFeatureKey.value = null
       feedback.value =
         command.feature === 'volume'
-          ? `浏览器预览模式：已模拟设置音量为 ${currentVolume.value}%`
-          : `浏览器预览模式：已模拟执行 ${feature.title}`
+          ? `音量已设置为 ${currentVolume.value}%`
+          : `${feature.title} 已执行`
     }, 500)
     return
   }
@@ -192,11 +192,11 @@ function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
 
 function handleTestAction() {
   testPending.value = true
-  feedback.value = '演示任务已开始，预计持续 5 秒。'
+  feedback.value = '控制演示进行中…'
 
   testTimer = window.setTimeout(() => {
     testPending.value = false
-    feedback.value = '演示任务执行完成。'
+    feedback.value = '演示已完成。'
     testTimer = null
   }, 5000)
 }
@@ -208,12 +208,12 @@ function handleCancelTestAction() {
   }
 
   testStopping.value = true
-  feedback.value = '正在请求终止任务…'
+  feedback.value = '正在停止演示…'
 
   window.setTimeout(() => {
     testStopping.value = false
     testPending.value = false
-    feedback.value = '演示任务已成功终止。'
+    feedback.value = '演示已停止。'
   }, 1500)
 }
 
@@ -224,7 +224,7 @@ async function handleAction(feature: ActionFeatureDefinition) {
   }
 
   if (feature.control.confirmRequired) {
-    const confirmed = window.confirm(`确认执行“${feature.title}”吗？该操作会立即生效。`)
+    const confirmed = window.confirm(`确认执行“${feature.title}”吗？`)
     if (!confirmed) {
       return
     }
@@ -239,7 +239,7 @@ function handleCancel(feature: ActionFeatureDefinition) {
     return
   }
 
-  feedback.value = `操作“${feature.title}”当前不支持中途终止。`
+  feedback.value = `${feature.title} 当前不支持中途取消。`
 }
 
 async function handleVolumeApply(feature: RangeFeatureDefinition) {
@@ -260,10 +260,10 @@ onMounted(loadPageData)
           <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">功能中心</Badge>
           <div class="space-y-4">
             <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white lg:text-6xl">
-              电源、音量与未来扩展动作，都放进统一的控制语言里。
+              常用控制集中在这里，操作更直接。
             </h2>
             <p class="max-w-2xl text-base leading-7 text-white/72">
-              样式上收敛成更安静、更可复用的模块，行为上保留清晰的状态反馈，方便后续继续增加新的控制能力和新的主题包。
+              无论是系统电源还是主音量，都可以在同一个入口里快速完成，减少来回切换。
             </p>
           </div>
           <div class="flex flex-wrap gap-3">
@@ -271,14 +271,14 @@ onMounted(loadPageData)
               to="/connected-devices"
               class="hero-pill border-transparent bg-white text-black hover:bg-white/90"
             >
-              前往设备管理
+              查看设备
             </router-link>
             <button
               type="button"
               class="hero-pill border-white/25 bg-white/5 text-white hover:bg-white/12"
               @click="refreshSnapshot"
             >
-              同步当前音量
+              刷新当前音量
             </button>
           </div>
         </div>
@@ -286,17 +286,17 @@ onMounted(loadPageData)
         <Card class="border-white/10 bg-white/6 text-white shadow-none">
           <CardHeader class="gap-3">
             <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">
-              当前反馈
+              最新反馈
             </Badge>
             <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-              最近一次执行回执
+              当前状态
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4 text-sm leading-6 text-white/74">
-            <p>{{ feedback || '尚未执行任何动作。点击下方任意控制项后，回执会出现在这里。' }}</p>
+            <p>{{ feedback || '选择任意控制项后，结果会显示在这里。' }}</p>
             <div class="flex items-start gap-3">
               <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-              <p>所有动作反馈都以 Rust 执行层结果为准，避免前端自行猜测状态。</p>
+              <p>重要操作会立即给出状态反馈，方便确认当前结果。</p>
             </div>
           </CardContent>
         </Card>
@@ -314,20 +314,20 @@ onMounted(loadPageData)
       v-if="loading"
       class="rounded-[1.75rem] border border-dashed border-border/80 bg-muted/40 px-6 py-14 text-center text-sm text-muted-foreground"
     >
-      正在加载功能定义与快照信息…
+      正在载入控制项…
     </div>
 
     <template v-else>
       <section class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
         <Card class="apple-section">
           <CardHeader class="gap-3">
-            <Badge variant="outline" class="w-fit rounded-full">动作测试</Badge>
+            <Badge variant="outline" class="w-fit rounded-full">操作演示</Badge>
             <div class="space-y-2">
               <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-                状态过渡演示
+                状态演示
               </CardTitle>
               <CardDescription>
-                先把最复杂的按钮状态跑顺，再把真实业务动作接进去，后面加任何动作卡片都会更稳。
+                先体验按钮反馈与状态切换，再执行真实控制项。
               </CardDescription>
             </div>
           </CardHeader>
@@ -344,23 +344,23 @@ onMounted(loadPageData)
 
         <Card class="apple-section">
           <CardHeader class="gap-3">
-            <Badge variant="secondary" class="w-fit rounded-full">设计原则</Badge>
+            <Badge variant="secondary" class="w-fit rounded-full">使用说明</Badge>
             <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
-              功能页不做管理台拼贴。
+              操作更集中，反馈更明确。
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4 text-sm leading-6 text-muted-foreground">
             <div class="flex items-start gap-3">
               <Power class="mt-0.5 size-4 text-primary" />
-              <p>危险动作用更明确的层级和二次确认，不与常规动作混在一起。</p>
+              <p>高风险操作会要求确认，避免误触。</p>
             </div>
             <div class="flex items-start gap-3">
               <SlidersHorizontal class="mt-0.5 size-4 text-primary" />
-              <p>范围型能力独立成一类卡片，避免和即时动作使用同一交互模式。</p>
+              <p>滑杆调整适合连续控制，动作按钮适合即时执行。</p>
             </div>
             <div class="flex items-start gap-3">
               <Sparkles class="mt-0.5 size-4 text-primary" />
-              <p>新增能力时只需要补数据模型和卡片，不需要重做整页结构。</p>
+              <p>每次操作完成后，都会在页面内给出结果提示。</p>
             </div>
           </CardContent>
         </Card>
@@ -372,10 +372,10 @@ onMounted(loadPageData)
             <Badge variant="outline" class="w-fit rounded-full">电源控制</Badge>
             <div class="space-y-2">
               <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-                即时动作
+                即时操作
               </CardTitle>
               <CardDescription>
-                将关机、重启等高风险动作从视觉上做出更明确的风险区分。
+                重要控制项集中展示，方便快速执行。
               </CardDescription>
             </div>
           </CardHeader>
@@ -393,12 +393,12 @@ onMounted(loadPageData)
 
         <Card v-if="volumeFeature" class="apple-section">
           <CardHeader class="gap-3">
-            <Badge variant="secondary" class="w-fit rounded-full">范围控制</Badge>
+            <Badge variant="secondary" class="w-fit rounded-full">音量控制</Badge>
             <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-              音量
+              主音量
             </CardTitle>
             <CardDescription>
-              深浅色模式下都只保留一条主滑杆，不再做杂乱的装饰性控制条。
+              调整系统主输出音量，并可随时刷新当前状态。
             </CardDescription>
           </CardHeader>
           <CardContent>

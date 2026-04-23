@@ -34,7 +34,7 @@ export const defaultLightTheme = withSharedTokens({
   '--app-nav-foreground': 'oklch(0.23 0.014 286)',
   '--app-nav-muted': 'oklch(0.47 0.018 286)',
   '--app-nav-border': 'color-mix(in oklab, oklch(0.91 0.01 286) 74%, white)',
-  '--app-grid-line': 'color-mix(in oklab, oklch(0.91 0.01 286) 70%, transparent)',
+  '--app-grid-line': 'rgba(82, 76, 96, 0.2)',
   '--app-success': 'oklch(0.72 0.15 154)',
   '--app-warning': 'oklch(0.79 0.14 78)',
   '--app-danger': 'oklch(0.64 0.2 28)',

@@ -30,21 +30,21 @@ const summaryCards = computed(() => {
 
   return [
     {
-      label: '已识别外设',
+      label: '已连接设备',
       value: `${total}`,
-      caption: '正在与底层硬件监听结果保持同步。',
+      caption: '常用外设状态一目了然。',
       icon: Cpu,
     },
     {
-      label: '状态稳定',
+      label: '运行正常',
       value: `${healthy}`,
-      caption: '当前可继续联动执行，不需要额外干预。',
+      caption: '当前可继续使用，无需额外处理。',
       icon: RadioTower,
     },
     {
       label: '需要关注',
       value: `${attention}`,
-      caption: '建议前往设备管理页做进一步确认。',
+      caption: '建议前往设备管理查看详情。',
       icon: Sparkles,
     },
   ]
@@ -107,17 +107,15 @@ onUnmounted(async () => {
       <div class="grid gap-8 px-8 py-10 lg:grid-cols-[minmax(0,1.2fr)_380px] lg:px-12 lg:py-14">
         <div class="space-y-6">
           <Badge class="rounded-full border-white/20 bg-white/10 px-3 py-1 text-white">
-            默认主题 · {{ featuredDevices.length }} 台设备已接入总览
+            总览 · {{ featuredDevices.length }} 台设备在线展示
           </Badge>
 
           <div class="space-y-4">
             <h2 class="max-w-3xl font-[var(--font-display)] text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white lg:text-6xl">
-              把设备状态、系统动作和移动端联动，统一收束到一块桌面总控屏里。
+              把常用控制、设备状态与系统操作，集中到同一个桌面入口。
             </h2>
             <p class="max-w-2xl text-base leading-7 text-white/72 lg:text-lg">
-              视觉上参考 Apple 的节奏与留白，但主题色保留项目自身的克制紫色。后续新增主题时，只需要在
-              <code>src/themes</code>
-              下补充新的主题目录，就能继续扩展整套浅色与深色模式。
+              在开始操作前，先快速查看当前设备情况、核心控制项与最近需要关注的状态，让常用操作保持清晰顺手。
             </p>
           </div>
 
@@ -157,13 +155,13 @@ onUnmounted(async () => {
     <section class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_420px]">
       <Card class="apple-section border-border/70 bg-card/95">
         <CardHeader class="gap-3">
-          <Badge variant="outline" class="w-fit rounded-full">外设状态</Badge>
+          <Badge variant="outline" class="w-fit rounded-full">设备概览</Badge>
           <div class="space-y-2">
             <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-              当前被识别到的设备
+              当前设备
             </CardTitle>
             <CardDescription class="max-w-2xl text-sm leading-6">
-              只保留最有判断价值的信息：设备类别、设备名称和当前状态，不再堆砌过重的装饰性面板。
+              快速查看已识别的外设与当前状态，便于在操作前确认连接情况。
             </CardDescription>
           </div>
         </CardHeader>
@@ -183,7 +181,7 @@ onUnmounted(async () => {
                 </h3>
               </div>
               <Badge :variant="getStatusVariant(device.status)">
-                {{ device.status?.toLowerCase() === 'ok' ? '稳定' : '待检查' }}
+                {{ device.status?.toLowerCase() === 'ok' ? '正常' : '待检查' }}
               </Badge>
             </div>
             <p class="text-sm leading-6 text-muted-foreground">
@@ -195,7 +193,7 @@ onUnmounted(async () => {
             v-if="featuredDevices.length === 0"
             class="col-span-full rounded-[1.5rem] border border-dashed border-border/80 bg-muted/40 px-6 py-12 text-center text-sm text-muted-foreground"
           >
-            当前还没有拿到外设数据，可能是硬件监听尚未返回结果。
+            暂未检测到可展示的设备信息。
           </div>
         </CardContent>
       </Card>
@@ -204,27 +202,27 @@ onUnmounted(async () => {
         <Card class="apple-section apple-inverse border-0">
           <CardHeader class="gap-3">
             <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">
-              推荐方向
+              常用入口
             </Badge>
             <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em] text-white">
-              先做好主题基座，再放大功能模块。
+              常用操作放在更近的位置。
             </CardTitle>
             <CardDescription class="text-white/70">
-              现在的结构已经适合继续加新主题包、组件包，以及不同风格的页面变体。
+              将高频控制项收纳到统一入口，减少页面来回切换。
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4 text-sm leading-6 text-white/74">
             <div class="flex items-start gap-3">
               <Power class="mt-0.5 size-4 text-white/80" />
-              <p>电源与音量等高风险动作统一收口到功能中心，避免分散在各个页面里。</p>
+              <p>电源相关操作集中管理，重要动作更清晰。</p>
             </div>
             <div class="flex items-start gap-3">
               <Volume2 class="mt-0.5 size-4 text-white/80" />
-              <p>深浅色不再是简单反色，所有层级颜色都按主题单独调校。</p>
+              <p>音量调整与状态同步可以直接在功能中心完成。</p>
             </div>
             <div class="flex items-start gap-3">
               <ExternalLink class="mt-0.5 size-4 text-white/80" />
-              <p>新增主题时只要沿用默认主题的 token 结构，不用再改页面组件。</p>
+              <p>设备管理页提供更完整的连接信息与操作入口。</p>
             </div>
           </CardContent>
         </Card>
@@ -234,7 +232,7 @@ onUnmounted(async () => {
             <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
               快速入口
             </CardTitle>
-            <CardDescription>把高频切换的工作流压缩成更短的路径。</CardDescription>
+            <CardDescription>从这里直接进入常用页面。</CardDescription>
           </CardHeader>
           <CardContent class="flex flex-col gap-3">
             <router-link
@@ -248,7 +246,7 @@ onUnmounted(async () => {
               to="/connected-devices"
               class="flex items-center justify-between rounded-full border border-border px-4 py-3 text-sm transition-colors hover:bg-accent"
             >
-              <span>管理受信设备</span>
+              <span>管理设备</span>
               <Cpu class="size-4 text-primary" />
             </router-link>
           </CardContent>

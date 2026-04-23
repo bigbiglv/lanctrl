@@ -48,7 +48,7 @@
   --app-nav-foreground: oklch(0.23 0.014 286);
   --app-nav-muted: oklch(0.47 0.018 286);
   --app-nav-border: color-mix(in oklab, oklch(0.91 0.01 286) 74%, white);
-  --app-grid-line: color-mix(in oklab, oklch(0.91 0.01 286) 70%, transparent);
+  --app-grid-line: rgba(82, 76, 96, 0.2);
   --app-success: oklch(0.72 0.15 154);
   --app-warning: oklch(0.79 0.14 78);
   --app-danger: oklch(0.64 0.2 28);
@@ -117,8 +117,13 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     text-rendering: optimizeLegibility;
+  }
+
+  #app {
+    position: relative;
   }
 
   body::before {
@@ -131,7 +136,7 @@
       linear-gradient(to bottom, var(--app-grid-line) 1px, transparent 1px);
     background-size: 120px 120px;
     mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
-    opacity: 0.22;
+    opacity: 0.36;
   }
 
   a {

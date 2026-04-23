@@ -60,13 +60,18 @@ const displayValue = computed(() => `${value}${feature.control.unit}`)
 
       <div class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-          当前滑块值会被直接发送到执行层
+          调整后点击按钮即可立即应用
         </p>
 
         <div class="flex flex-wrap gap-3">
-          <Button variant="outline" class="rounded-full" :disabled="refreshing || pending" @click="emit('refresh')">
+          <Button
+            variant="outline"
+            class="rounded-full"
+            :disabled="refreshing || pending"
+            @click="emit('refresh')"
+          >
             <RefreshCw class="size-4" :class="{ 'animate-spin': refreshing }" />
-            {{ refreshing ? '同步中…' : '同步当前音量' }}
+            {{ refreshing ? '刷新中…' : '刷新当前音量' }}
           </Button>
 
           <Button class="rounded-full" :disabled="pending" @click="emit('apply', feature)">

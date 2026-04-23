@@ -94,9 +94,7 @@ async function fetchClients() {
 }
 
 async function forgetDevice(client: ClientInfo) {
-  const confirmed = window.confirm(
-    `确认忘记设备“${client.client_name}”吗？忘记后该设备需要重新发起配对。`,
-  )
+  const confirmed = window.confirm(`确认移除“${client.client_name}”吗？`)
 
   if (!confirmed) {
     return
@@ -176,16 +174,16 @@ onUnmounted(() => {
         <div class="max-w-3xl space-y-4">
           <Badge variant="outline" class="w-fit rounded-full">设备管理</Badge>
           <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
-            哪些设备已受信、哪些设备在线、哪些设备正在占用控制权，一眼看清。
+            查看已配对设备、在线状态和当前连接情况。
           </h2>
           <p class="text-base leading-7 text-muted-foreground">
-            这一页不再追求“管理后台”的堆砌感，而是像产品页一样，把最关键的状态压缩成更高密度的信息卡片。
+            你可以在这里快速确认哪些设备可用，并对不再需要的设备进行移除。
           </p>
         </div>
 
         <Button variant="outline" class="w-fit rounded-full" @click="fetchClients">
           <RefreshCw class="size-4" />
-          重新检测
+          刷新设备
         </Button>
       </div>
     </section>
@@ -194,7 +192,7 @@ onUnmounted(() => {
       <Card class="apple-section">
         <CardHeader class="gap-3">
           <div class="flex flex-wrap items-center gap-3">
-            <Badge class="rounded-full">{{ clients.length }} 台受信设备</Badge>
+            <Badge class="rounded-full">{{ clients.length }} 台设备</Badge>
             <Badge variant="secondary" class="rounded-full">{{ onlineCount }} 台在线</Badge>
             <Badge variant="outline" class="rounded-full">{{ connectedCount }} 台已连接</Badge>
           </div>
@@ -203,7 +201,7 @@ onUnmounted(() => {
               设备列表
             </CardTitle>
             <CardDescription>
-              每张卡片只保留设备身份、网络状态与最近活跃时间。
+              每张卡片展示设备名称、最近在线时间和连接状态。
             </CardDescription>
           </div>
         </CardHeader>
@@ -213,7 +211,7 @@ onUnmounted(() => {
             v-if="loading"
             class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
           >
-            正在刷新设备在线状态，请稍候。
+            正在刷新设备状态…
           </div>
 
           <article
@@ -248,7 +246,7 @@ onUnmounted(() => {
                   </div>
 
                   <div class="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                    <p>最近活跃：{{ formatLastSeen(client.last_seen_at) }}</p>
+                    <p>最近在线：{{ formatLastSeen(client.last_seen_at) }}</p>
                     <p>最近 IP：{{ client.last_ip || '未知' }}</p>
                   </div>
                 </div>
@@ -262,7 +260,7 @@ onUnmounted(() => {
                   @click="forgetDevice(client)"
                 >
                   <Unplug class="size-4" />
-                  忘记设备
+                  移除设备
                 </Button>
               </div>
             </div>
@@ -272,7 +270,7 @@ onUnmounted(() => {
             v-if="!loading && clients.length === 0"
             class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
           >
-            当前还没有受信任的移动端设备，可以先从手机端发起配对。
+            暂未发现已配对设备。
           </div>
         </CardContent>
       </Card>
@@ -280,22 +278,22 @@ onUnmounted(() => {
       <div class="flex flex-col gap-6">
         <Card class="apple-section apple-inverse border-0">
           <CardHeader class="gap-3">
-            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">同步关系</Badge>
+            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">状态说明</Badge>
             <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-              当前连接并不等于永久受信。
+              在线与连接状态会实时变化。
             </CardTitle>
             <CardDescription class="text-white/70">
-              “在线”表示网络层可达，“已连接”表示当前会话正在使用控制能力。
+              通过页面中的状态标签，快速了解设备当前是否可用。
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4 text-sm leading-6 text-white/74">
             <div class="flex items-start gap-3">
               <Link2 class="mt-0.5 size-4 text-white/80" />
-              <p>受信关系长期保存，连接关系按当前会话实时变化。</p>
+              <p>在线表示设备当前可被访问。</p>
             </div>
             <div class="flex items-start gap-3">
               <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-              <p>忘记设备时会先尝试通知移动端断开，然后再删除配对记录。</p>
+              <p>已连接表示该设备正在使用当前控制会话。</p>
             </div>
           </CardContent>
         </Card>

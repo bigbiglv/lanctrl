@@ -25,7 +25,7 @@ import TopBar from './TopBar.vue'
 
 .layout-main {
   flex: 1;
-  overflow: auto;
+  overflow: visible;
   padding: 1.5rem 2rem 2rem;
 }
 

@@ -10,22 +10,22 @@ import {
 } from '../../components/ui/card/index'
 
 const demoTimeline = [
-  { title: '音量调整', result: '已完成', detail: '桌面端触发，将系统音量同步到 38%' },
-  { title: '设备移除', result: '已确认', detail: '受信设备被手动移除，并通知移动端断开连接' },
-  { title: '电源控制', result: '已拒绝', detail: '用户取消了本次敏感动作，不写入执行层' },
+  { title: '音量调整', result: '已完成', detail: '系统主音量已更新为 38%' },
+  { title: '设备移除', result: '已确认', detail: '所选设备已从当前设备列表中移除' },
+  { title: '重新启动', result: '已取消', detail: '本次操作未继续执行' },
 ]
 </script>
 
 <template>
   <section class="mx-auto flex w-full max-w-[1240px] flex-col gap-6">
     <section class="apple-section rounded-[2.5rem] px-8 py-10 lg:px-12">
-      <Badge variant="outline" class="w-fit rounded-full">历史追踪</Badge>
+      <Badge variant="outline" class="w-fit rounded-full">任务记录</Badge>
       <div class="mt-4 max-w-3xl space-y-4">
         <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
-          任务记录页应该像一条清晰的时间线，而不是一张密密麻麻的日志表。
+          重要操作的结果与时间，会按顺序保留在这里。
         </h2>
         <p class="text-base leading-7 text-muted-foreground">
-          这里先放入一组演示数据，目的是把后续真正的历史流设计出来：每条记录至少包含动作、结果、来源和一句解释。
+          通过任务记录，你可以快速回看最近的控制结果与处理状态。
         </p>
       </div>
     </section>
@@ -34,9 +34,9 @@ const demoTimeline = [
       <Card class="apple-section">
         <CardHeader class="gap-2">
           <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-            演示时间线
+            最近记录
           </CardTitle>
-          <CardDescription>真实数据接入后，这一列直接替换为后端回执流。</CardDescription>
+          <CardDescription>操作完成后，结果会出现在这里。</CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
           <article
@@ -57,26 +57,26 @@ const demoTimeline = [
 
       <Card class="apple-section apple-inverse border-0">
         <CardHeader class="gap-3">
-          <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">设计提示</Badge>
+          <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">记录说明</Badge>
           <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-            历史记录页最重要的是“可信”。
+            关键结果清晰可查。
           </CardTitle>
           <CardDescription class="text-white/70">
-            记录页不是炫技场，而是操作可信度的证明材料。
+            每条记录都会保留状态与结果，方便你快速回看。
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 text-sm leading-6 text-white/74">
           <div class="flex items-start gap-3">
             <History class="mt-0.5 size-4 text-white/80" />
-            <p>每条记录都需要明确动作和结果，避免只留模糊描述。</p>
+            <p>近期操作会按时间顺序展示。</p>
           </div>
           <div class="flex items-start gap-3">
             <ShieldCheck class="mt-0.5 size-4 text-white/80" />
-            <p>敏感动作必须保留确认链路与失败原因，便于审计与回滚。</p>
+            <p>需要确认的操作会保留最终结果状态。</p>
           </div>
           <div class="flex items-start gap-3">
             <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-            <p>如果未来增加筛选器，优先做时间、来源和结果三种过滤维度。</p>
+            <p>常用信息会优先展示，方便快速定位。</p>
           </div>
         </CardContent>
       </Card>

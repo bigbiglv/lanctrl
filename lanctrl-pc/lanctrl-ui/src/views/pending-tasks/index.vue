@@ -10,22 +10,22 @@ import {
 } from '../../components/ui/card/index'
 
 const placeholderSteps = [
-  '等待移动端确认的远程控制请求',
-  '等待本机执行完成的系统级动作',
-  '等待同步状态的音量与设备扫描任务',
+  '等待设备确认的远程控制请求',
+  '等待系统完成的关键操作',
+  '等待同步结果的音量与设备扫描任务',
 ]
 </script>
 
 <template>
   <section class="mx-auto flex w-full max-w-[1240px] flex-col gap-6">
     <section class="apple-section apple-inverse rounded-[2.5rem] border-0 px-8 py-10 lg:px-12">
-      <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">任务视图</Badge>
+      <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">待处理任务</Badge>
       <div class="mt-4 max-w-3xl space-y-4">
         <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white lg:text-5xl">
-          待处理任务页已经预留好了结构，现在缺的是业务数据而不是视觉骨架。
+          所有等待中的操作，都会集中显示在这里。
         </h2>
         <p class="text-base leading-7 text-white/70">
-          我保留了接下来最可能出现的三类任务类型，后续你只需要把真实数据源接进来，这一页就能直接承接。
+          当设备确认、系统执行或状态同步仍在处理中时，你可以在这里快速查看当前进度。
         </p>
       </div>
     </section>
@@ -33,12 +33,12 @@ const placeholderSteps = [
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_360px]">
       <Card class="apple-section">
         <CardHeader class="gap-3">
-          <Badge variant="outline" class="w-fit rounded-full">空态设计</Badge>
+          <Badge variant="outline" class="w-fit rounded-full">当前任务</Badge>
           <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-            先把任务语义定义清楚。
+            待处理内容
           </CardTitle>
           <CardDescription>
-            页面空态不再只是“施工中”，而是直接告诉后续开发这里会承载什么类型的任务。
+            这里会显示仍需等待结果的关键操作。
           </CardDescription>
         </CardHeader>
         <CardContent class="grid gap-4">
@@ -58,18 +58,18 @@ const placeholderSteps = [
       <Card class="apple-section">
         <CardHeader class="gap-2">
           <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
-            建议数据结构
+            状态提示
           </CardTitle>
-          <CardDescription>先把列表模型约定好，接入会更顺。</CardDescription>
+          <CardDescription>常见等待状态会在这里集中展示。</CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 text-sm text-muted-foreground">
           <div class="flex items-start gap-3">
             <Clock3 class="mt-0.5 size-4 text-primary" />
-            <p>任务类型、触发源、优先级、当前状态。</p>
+            <p>等待执行、等待确认与等待同步会分别标记。</p>
           </div>
           <div class="flex items-start gap-3">
             <BellRing class="mt-0.5 size-4 text-primary" />
-            <p>是否需要二次确认，以及超时后的兜底动作。</p>
+            <p>需要你再次确认的操作会有更明确的提醒。</p>
           </div>
         </CardContent>
       </Card>

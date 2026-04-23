@@ -31,9 +31,9 @@ const iconIndex = computed(() => {
 })
 
 const buttonText = computed(() => {
-  if (stopping) return '正在终止…'
+  if (stopping) return '正在停止…'
   if (!pending) return feature.control.buttonText
-  return isHovered.value ? '终止执行' : '执行中…'
+  return isHovered.value ? '取消操作' : '执行中…'
 })
 
 const badgeVariant = computed(() => (feature.control.tone === 'danger' ? 'destructive' : 'secondary'))
@@ -61,9 +61,9 @@ function handleClick() {
       <div class="space-y-4">
         <div class="flex items-start justify-between gap-3">
           <Badge :variant="badgeVariant" class="rounded-full">
-            {{ feature.control.tone === 'danger' ? '高风险动作' : '即时动作' }}
+            {{ feature.control.tone === 'danger' ? '高风险操作' : '即时操作' }}
           </Badge>
-          <Badge v-if="feature.mobileReady" variant="outline" class="rounded-full">移动端可复用</Badge>
+          <Badge v-if="feature.mobileReady" variant="outline" class="rounded-full">支持移动端</Badge>
         </div>
 
         <div class="space-y-2">

@@ -1,21 +1,14 @@
 <script setup lang="ts">
-import {
-  Clock3,
-  House,
-  MoonStar,
-  PanelsTopLeft,
-  Smartphone,
-  Sparkles,
-  SunMedium,
-} from 'lucide-vue-next'
+import { mdiMoonWaningCrescent, mdiWeatherSunny } from '@mdi/js'
+import { Clock3, House, PanelsTopLeft, Smartphone, Sparkles } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Badge } from '../ui/badge/index'
+import MorphIcon from '../common/MorphIcon.vue'
 import { Button } from '../ui/button/index'
 import { useTheme } from '../../composables/use-theme'
 
 const route = useRoute()
-const { mode, themeId, toggleThemeMode } = useTheme()
+const { mode, toggleThemeMode } = useTheme()
 
 const navigationItems = [
   { path: '/', label: '控制台', icon: House },
@@ -27,11 +20,15 @@ const navigationItems = [
 
 const currentTitle = computed(() => String(route.meta.title ?? 'LanCtrl'))
 const currentDescription = computed(() =>
-  String(
-    route.meta.description ??
-      '围绕局域网控制、设备联动与自动化执行，建立一套更清晰的桌面控制中枢。',
-  ),
+  String(route.meta.description ?? '集中查看设备状态、控制能力与常用操作。'),
 )
+
+const themeIconPaths = [mdiMoonWaningCrescent, mdiWeatherSunny]
+const themeIconIndex = computed(() => (mode.value === 'dark' ? 1 : 0))
+
+function isNavigationItemActive(path: string) {
+  return route.path === path
+}
 </script>
 
 <template>
@@ -56,7 +53,7 @@ const currentDescription = computed(() =>
           :key="item.path"
           :to="item.path"
           class="nav-link"
-          active-class="is-active"
+          :class="{ 'is-active': isNavigationItemActive(item.path) }"
         >
           <component :is="item.icon" class="nav-link-icon" />
           <span>{{ item.label }}</span>
@@ -64,15 +61,8 @@ const currentDescription = computed(() =>
       </nav>
 
       <div class="nav-actions">
-        <Badge variant="outline" class="status-badge">
-          {{ themeId === 'default' ? '默认主题' : themeId }}
-          <span class="status-dot"></span>
-          {{ mode === 'dark' ? '深色' : '浅色' }}
-        </Badge>
-
         <Button variant="outline" size="icon" class="theme-button" @click="toggleThemeMode">
-          <SunMedium v-if="mode === 'dark'" class="size-4" />
-          <MoonStar v-else class="size-4" />
+          <MorphIcon :paths="themeIconPaths" :active-index="themeIconIndex" size="1rem" />
         </Button>
       </div>
     </div>
@@ -121,8 +111,8 @@ const currentDescription = computed(() =>
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--primary) 78%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 36%, white);
+  background: color-mix(in oklab, var(--primary) 82%, var(--background));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 44%, var(--background));
 }
 
 .brand-grid::before,
@@ -175,7 +165,8 @@ const currentDescription = computed(() =>
   justify-content: center;
   gap: 0.5rem;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .nav-link {
@@ -186,6 +177,7 @@ const currentDescription = computed(() =>
   border-radius: 999px;
   color: var(--app-nav-muted);
   font-size: 0.92rem;
+  white-space: nowrap;
   transition:
     background-color 160ms ease,
     color 160ms ease,
@@ -213,6 +205,7 @@ const currentDescription = computed(() =>
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .status-badge {
@@ -238,36 +231,61 @@ const currentDescription = computed(() =>
 
 @media (max-width: 1280px) {
   .nav-inner {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+    grid-template-columns: minmax(180px, auto) minmax(0, 1fr) auto;
+    gap: 0.9rem;
+  }
+}
+
+@media (max-width: 1080px) {
+  .brand-copy {
+    display: none;
   }
 
-  .nav-links {
-    justify-content: flex-start;
+  .nav-link {
+    padding-inline: 0.75rem;
+  }
+}
+
+@media (max-width: 920px) {
+  .nav-inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  .nav-actions {
-    justify-content: space-between;
+  .status-badge {
+    display: none;
   }
 }
 
 @media (max-width: 720px) {
   .nav-shell {
-    padding-inline: 1rem;
+    padding: 1rem 1rem 0;
   }
 
-  .brand-block {
-    flex-direction: column;
-    align-items: flex-start;
+  .nav-inner {
+    border-radius: 1.5rem;
+    padding: 0.75rem;
   }
 
   .nav-links {
-    gap: 0.35rem;
+    justify-content: flex-end;
+    gap: 0.25rem;
   }
 
   .nav-link {
-    width: calc(50% - 0.2rem);
     justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+  }
+
+  .nav-link span {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .brand-wordmark {
+    display: none;
   }
 }
 </style>
