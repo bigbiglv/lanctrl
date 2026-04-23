@@ -1,6 +1,15 @@
 <script setup lang="ts">
+import { ArrowUpRight, Power, SlidersHorizontal, Sparkles } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { Badge } from '../../components/ui/badge/index'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../components/ui/card/index'
 import ActionCard from './components/ActionCard.vue'
 import RangeCard from './components/RangeCard.vue'
 import type {
@@ -21,6 +30,54 @@ const snapshotRefreshing = ref(false)
 const feedback = ref('')
 const activeFeatureKey = ref<string | null>(null)
 
+const mockFeatureGroups: FeatureGroup[] = [
+  {
+    groupKey: 'power',
+    title: '电源控制',
+    description: '系统电源相关控制能力。',
+    features: [
+      {
+        featureKey: 'shutdown',
+        title: '安全关机',
+        description: '向执行层发起安全关机请求。',
+        mobileReady: true,
+        control: {
+          type: 'action',
+          buttonText: '立即关机',
+          tone: 'danger',
+          confirmRequired: true,
+        },
+      },
+      {
+        featureKey: 'restart',
+        title: '重新启动',
+        description: '重新启动当前桌面环境。',
+        mobileReady: true,
+        control: {
+          type: 'action',
+          buttonText: '立即重启',
+          tone: 'primary',
+          confirmRequired: true,
+        },
+      },
+      {
+        featureKey: 'volume',
+        title: '主音量',
+        description: '控制系统级主输出音量。',
+        mobileReady: true,
+        control: {
+          type: 'range',
+          min: 0,
+          max: 100,
+          step: 1,
+          unit: '%',
+          actionText: '应用音量',
+        },
+      },
+    ],
+  },
+]
+
 const featureList = computed(() => groups.value.flatMap((group) => group.features))
 const actionFeatures = computed(() =>
   featureList.value.filter((feature): feature is ActionFeatureDefinition => isActionFeature(feature)),
@@ -29,7 +86,32 @@ const volumeFeature = computed(() =>
   featureList.value.find((feature): feature is RangeFeatureDefinition => isRangeFeature(feature)),
 )
 
+const testPending = ref(false)
+const testStopping = ref(false)
+let testTimer: number | null = null
+
+const testFeature: ActionFeatureDefinition = {
+  featureKey: 'test-long-run',
+  title: '交互状态演示',
+  description: '模拟一个持续 5 秒的动作，验证“执行中”和“终止中”的按钮状态切换。',
+  mobileReady: true,
+  control: {
+    type: 'action',
+    buttonText: '开始演示',
+    tone: 'primary',
+    confirmRequired: false,
+  },
+}
+
 async function loadPageData() {
+  if (!isTauri()) {
+    groups.value = mockFeatureGroups
+    currentVolume.value = 38
+    loading.value = false
+    feedback.value = '当前处于浏览器预览模式，功能数据已切换为本地 mock。'
+    return
+  }
+
   loading.value = true
 
   try {
@@ -48,6 +130,16 @@ async function loadPageData() {
 }
 
 async function refreshSnapshot() {
+  if (!isTauri()) {
+    snapshotRefreshing.value = true
+    window.setTimeout(() => {
+      currentVolume.value = 42
+      snapshotRefreshing.value = false
+      feedback.value = '浏览器预览模式下，音量已模拟同步为 42%。'
+    }, 400)
+    return
+  }
+
   snapshotRefreshing.value = true
 
   try {
@@ -62,6 +154,18 @@ async function refreshSnapshot() {
 }
 
 async function runCommand(feature: FeatureDefinition, command: FeatureCommand) {
+  if (!isTauri()) {
+    activeFeatureKey.value = feature.featureKey
+    window.setTimeout(() => {
+      activeFeatureKey.value = null
+      feedback.value =
+        command.feature === 'volume'
+          ? `浏览器预览模式：已模拟设置音量为 ${currentVolume.value}%`
+          : `浏览器预览模式：已模拟执行 ${feature.title}`
+    }, 500)
+    return
+  }
+
   activeFeatureKey.value = feature.featureKey
 
   try {
@@ -72,7 +176,7 @@ async function runCommand(feature: FeatureDefinition, command: FeatureCommand) {
       currentVolume.value = result.volumeLevel
     }
   } catch (error) {
-    feedback.value = `${feature.title}执行失败：${String(error)}`
+    feedback.value = `${feature.title} 执行失败：${String(error)}`
   } finally {
     activeFeatureKey.value = null
   }
@@ -86,30 +190,13 @@ function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
   return { feature: 'restart' }
 }
 
-const testPending = ref(false)
-const testStopping = ref(false)
-let testTimer: number | null = null
-
-const testFeature: ActionFeatureDefinition = {
-  featureKey: 'test-long-run',
-  title: '交互状态测试',
-  description: '模拟一个耗时 5 秒的任务，测试按钮的“执行中”与“终止”状态切换。',
-  mobileReady: true,
-  control: {
-    type: 'action',
-    buttonText: '开始测试 (5s)',
-    tone: 'primary',
-    confirmRequired: false,
-  },
-}
-
-async function handleTestAction() {
+function handleTestAction() {
   testPending.value = true
-  feedback.value = '测试任务已开始，预计耗时 5 秒...'
+  feedback.value = '演示任务已开始，预计持续 5 秒。'
 
   testTimer = window.setTimeout(() => {
     testPending.value = false
-    feedback.value = '测试任务执行完毕！'
+    feedback.value = '演示任务执行完成。'
     testTimer = null
   }, 5000)
 }
@@ -119,20 +206,18 @@ function handleCancelTestAction() {
     clearTimeout(testTimer)
     testTimer = null
   }
-  
-  // 模拟终止过程耗时
+
   testStopping.value = true
-  feedback.value = '正在请求终止任务...'
+  feedback.value = '正在请求终止任务…'
 
   window.setTimeout(() => {
     testStopping.value = false
     testPending.value = false
-    feedback.value = '测试任务已成功终止。'
+    feedback.value = '演示任务已成功终止。'
   }, 1500)
 }
 
 async function handleAction(feature: ActionFeatureDefinition) {
-  // 处理测试卡片
   if (feature.featureKey === 'test-long-run') {
     handleTestAction()
     return
@@ -151,9 +236,10 @@ async function handleAction(feature: ActionFeatureDefinition) {
 function handleCancel(feature: ActionFeatureDefinition) {
   if (feature.featureKey === 'test-long-run') {
     handleCancelTestAction()
-  } else {
-    feedback.value = `操作“${feature.title}”不支持终止。`
+    return
   }
+
+  feedback.value = `操作“${feature.title}”当前不支持中途终止。`
 }
 
 async function handleVolumeApply(feature: RangeFeatureDefinition) {
@@ -167,173 +253,167 @@ onMounted(loadPageData)
 </script>
 
 <template>
-  <section class="feature-page fade-in">
-    <header class="page-header">
-      <div>
-        <h2>功能中心</h2>
-        <p>PC 页面、Rust 执行层，以及移动端远程指令统一复用同一套功能模型。</p>
-      </div>
-      <div class="api-info glass-panel">
-        <span>移动端接口</span>
-        <strong>/features/catalog · /features/execute</strong>
-      </div>
-    </header>
+  <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
+    <section class="apple-section apple-inverse rounded-[2.5rem] border-0 px-8 py-10 lg:px-12">
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_360px]">
+        <div class="space-y-5">
+          <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">功能中心</Badge>
+          <div class="space-y-4">
+            <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white lg:text-6xl">
+              电源、音量与未来扩展动作，都放进统一的控制语言里。
+            </h2>
+            <p class="max-w-2xl text-base leading-7 text-white/72">
+              样式上收敛成更安静、更可复用的模块，行为上保留清晰的状态反馈，方便后续继续增加新的控制能力和新的主题包。
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <router-link
+              to="/connected-devices"
+              class="hero-pill border-transparent bg-white text-black hover:bg-white/90"
+            >
+              前往设备管理
+            </router-link>
+            <button
+              type="button"
+              class="hero-pill border-white/25 bg-white/5 text-white hover:bg-white/12"
+              @click="refreshSnapshot"
+            >
+              同步当前音量
+            </button>
+          </div>
+        </div>
 
-    <div v-if="feedback" class="feedback-banner glass-panel" @click="feedback = ''">
+        <Card class="border-white/10 bg-white/6 text-white shadow-none">
+          <CardHeader class="gap-3">
+            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">
+              当前反馈
+            </Badge>
+            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
+              最近一次执行回执
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-4 text-sm leading-6 text-white/74">
+            <p>{{ feedback || '尚未执行任何动作。点击下方任意控制项后，回执会出现在这里。' }}</p>
+            <div class="flex items-start gap-3">
+              <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
+              <p>所有动作反馈都以 Rust 执行层结果为准，避免前端自行猜测状态。</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+
+    <div
+      v-if="feedback"
+      class="rounded-[1.75rem] border border-border/70 bg-card/90 px-5 py-4 text-sm text-foreground"
+    >
       {{ feedback }}
-      <small style="margin-left: 1rem; opacity: 0.7">(点击关闭)</small>
     </div>
 
-    <div v-if="loading" class="loading-panel glass-panel">
-      正在加载功能定义...
+    <div
+      v-if="loading"
+      class="rounded-[1.75rem] border border-dashed border-border/80 bg-muted/40 px-6 py-14 text-center text-sm text-muted-foreground"
+    >
+      正在加载功能定义与快照信息…
     </div>
 
     <template v-else>
-      <!-- 测试区域 -->
-      <section class="group-section">
-        <div class="group-head">
-          <h3>UI 组件测试</h3>
-          <p>测试按钮的三种状态：点击执行 -> 执行中 -> 终止执行（悬停时）。</p>
-        </div>
-        <div class="action-grid">
-          <ActionCard
-            :feature="testFeature"
-            :pending="testPending"
-            :stopping="testStopping"
-            @execute="handleAction"
-            @cancel="handleCancel"
-          />
-        </div>
+      <section class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+        <Card class="apple-section">
+          <CardHeader class="gap-3">
+            <Badge variant="outline" class="w-fit rounded-full">动作测试</Badge>
+            <div class="space-y-2">
+              <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
+                状态过渡演示
+              </CardTitle>
+              <CardDescription>
+                先把最复杂的按钮状态跑顺，再把真实业务动作接进去，后面加任何动作卡片都会更稳。
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ActionCard
+              :feature="testFeature"
+              :pending="testPending"
+              :stopping="testStopping"
+              @execute="handleAction"
+              @cancel="handleCancel"
+            />
+          </CardContent>
+        </Card>
+
+        <Card class="apple-section">
+          <CardHeader class="gap-3">
+            <Badge variant="secondary" class="w-fit rounded-full">设计原则</Badge>
+            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
+              功能页不做管理台拼贴。
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-4 text-sm leading-6 text-muted-foreground">
+            <div class="flex items-start gap-3">
+              <Power class="mt-0.5 size-4 text-primary" />
+              <p>危险动作用更明确的层级和二次确认，不与常规动作混在一起。</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <SlidersHorizontal class="mt-0.5 size-4 text-primary" />
+              <p>范围型能力独立成一类卡片，避免和即时动作使用同一交互模式。</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <Sparkles class="mt-0.5 size-4 text-primary" />
+              <p>新增能力时只需要补数据模型和卡片，不需要重做整页结构。</p>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
-      <section class="group-section">
-        <div class="group-head">
-          <h3>电源控制</h3>
-          <p>关机与重启属于危险操作，页面与移动端都应该走显式确认流程。</p>
-        </div>
+      <section class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_420px]">
+        <Card class="apple-section">
+          <CardHeader class="gap-3">
+            <Badge variant="outline" class="w-fit rounded-full">电源控制</Badge>
+            <div class="space-y-2">
+              <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
+                即时动作
+              </CardTitle>
+              <CardDescription>
+                将关机、重启等高风险动作从视觉上做出更明确的风险区分。
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent class="grid gap-4 md:grid-cols-2">
+            <ActionCard
+              v-for="feature in actionFeatures"
+              :key="feature.featureKey"
+              :feature="feature"
+              :pending="activeFeatureKey === feature.featureKey"
+              @execute="handleAction"
+              @cancel="handleCancel"
+            />
+          </CardContent>
+        </Card>
 
-        <div class="action-grid">
-          <ActionCard
-            v-for="feature in actionFeatures"
-            :key="feature.featureKey"
-            :feature="feature"
-            :pending="activeFeatureKey === feature.featureKey"
-            @execute="handleAction"
-            @cancel="handleCancel"
-          />
-        </div>
-      </section>
-
-      <section v-if="volumeFeature" class="group-section">
-        <div class="group-head">
-          <h3>音频控制</h3>
-          <p>音量使用 0 到 100 的绝对值，后续移动端可以直接复用同一个参数约定。</p>
-        </div>
-
-        <RangeCard
-          :feature="volumeFeature"
-          :value="currentVolume"
-          :pending="activeFeatureKey === volumeFeature.featureKey"
-          :refreshing="snapshotRefreshing"
-          @update:value="currentVolume = $event"
-          @apply="handleVolumeApply"
-          @refresh="refreshSnapshot"
-        />
+        <Card v-if="volumeFeature" class="apple-section">
+          <CardHeader class="gap-3">
+            <Badge variant="secondary" class="w-fit rounded-full">范围控制</Badge>
+            <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
+              音量
+            </CardTitle>
+            <CardDescription>
+              深浅色模式下都只保留一条主滑杆，不再做杂乱的装饰性控制条。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RangeCard
+              :feature="volumeFeature"
+              :value="currentVolume"
+              :pending="activeFeatureKey === volumeFeature.featureKey"
+              :refreshing="snapshotRefreshing"
+              @update:value="currentVolume = $event"
+              @apply="handleVolumeApply"
+              @refresh="refreshSnapshot"
+            />
+          </CardContent>
+        </Card>
       </section>
     </template>
   </section>
 </template>
-
-<style scoped lang="scss">
-.feature-page {
-  height: 100%;
-  overflow-y: auto;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  align-items: flex-start;
-
-  h2 {
-    font-size: 2rem;
-    color: var(--text-main);
-    margin-bottom: 0.5rem;
-  }
-
-  p {
-    color: var(--text-muted);
-    line-height: 1.7;
-    max-width: 720px;
-  }
-}
-
-.api-info {
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  min-width: 250px;
-
-  span {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
-
-  strong {
-    color: var(--text-main);
-    font-size: 1rem;
-  }
-}
-
-.feedback-banner,
-.loading-panel {
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-}
-
-.group-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.group-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-
-  h3 {
-    color: var(--text-main);
-    font-size: 1.25rem;
-  }
-
-  p {
-    color: var(--text-muted);
-  }
-}
-
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-}
-
-@media (max-width: 960px) {
-  .page-header {
-    flex-direction: column;
-  }
-
-  .api-info {
-    width: 100%;
-    min-width: unset;
-  }
-}
-</style>

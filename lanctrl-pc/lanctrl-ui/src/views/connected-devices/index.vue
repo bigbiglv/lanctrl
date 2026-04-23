@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { ArrowUpRight, Link2, RefreshCw, Smartphone, Unplug } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
+import { Badge } from '../../components/ui/badge/index'
+import { Button } from '../../components/ui/button/index'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../components/ui/card/index'
 
 interface ClientInfo {
   client_id: string
@@ -16,21 +26,62 @@ interface ClientInfo {
 const clients = ref<ClientInfo[]>([])
 const loading = ref(true)
 
+const mockClients: ClientInfo[] = [
+  {
+    client_id: 'mobile-alpha',
+    client_name: 'iPhone 16 Pro',
+    last_seen_at: Date.now() - 1000 * 60 * 6,
+    last_ip: '192.168.31.18',
+    is_online: true,
+    is_connected: true,
+  },
+  {
+    client_id: 'mobile-beta',
+    client_name: 'iPad mini',
+    last_seen_at: Date.now() - 1000 * 60 * 42,
+    last_ip: '192.168.31.29',
+    is_online: true,
+    is_connected: false,
+  },
+  {
+    client_id: 'mobile-gamma',
+    client_name: 'Android Phone',
+    last_seen_at: Date.now() - 1000 * 60 * 180,
+    last_ip: null,
+    is_online: false,
+    is_connected: false,
+  },
+]
+
+let unlistenConnected: UnlistenFn | null = null
+let unlistenDisconnected: UnlistenFn | null = null
+
+const onlineCount = computed(() => clients.value.filter((client) => client.is_online).length)
+const connectedCount = computed(() => clients.value.filter((client) => client.is_connected).length)
+
 async function fetchClients() {
+  if (!isTauri()) {
+    loading.value = true
+    clients.value = mockClients
+    loading.value = false
+    return
+  }
+
   try {
     loading.value = true
     const rawClients = await invoke<ClientInfo[]>('get_clients_with_status')
 
-    // 并发 Ping 检测在线状态
     const checkPromises = rawClients.map(async (client) => {
       let isOnline = false
+
       if (client.last_ip) {
         try {
           isOnline = await invoke<boolean>('ping_mobile_device', { ip: client.last_ip })
         } catch {
-          // ignore
+          isOnline = false
         }
       }
+
       return { ...client, is_online: isOnline }
     })
 
@@ -42,13 +93,25 @@ async function fetchClients() {
   }
 }
 
-
 async function forgetDevice(client: ClientInfo) {
-  if (!confirm('确定要忘记该设备吗？忘记后该设备将无法控制本机，若要恢复需要重新在手机端发起配对。')) return
+  const confirmed = window.confirm(
+    `确认忘记设备“${client.client_name}”吗？忘记后该设备需要重新发起配对。`,
+  )
+
+  if (!confirmed) {
+    return
+  }
+
+  if (!isTauri()) {
+    clients.value = clients.value.filter((item) => item.client_id !== client.client_id)
+    return
+  }
+
   try {
     if (client.is_connected && client.last_ip) {
-      await invoke('notify_mobile_disconnect', { ip: client.last_ip }).catch(() => {})
+      await invoke('notify_mobile_disconnect', { ip: client.last_ip }).catch(() => undefined)
     }
+
     await invoke('remove_paired_client', { clientId: client.client_id })
     await fetchClients()
   } catch (error) {
@@ -56,265 +119,187 @@ async function forgetDevice(client: ClientInfo) {
   }
 }
 
-let unlistenConnected: UnlistenFn
-let unlistenDisconnected: UnlistenFn
+function formatLastSeen(timestamp: number) {
+  if (!timestamp) {
+    return '暂无记录'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+  }).format(timestamp)
+}
 
 onMounted(async () => {
-  fetchClients()
+  await fetchClients()
 
-  unlistenConnected = await listen<any>('device_connected', (e) => {
-    alert(`设备 [${e.payload.client_name}] 已连接并取得控制权`)
-    const target = clients.value.find(c => c.client_id === e.payload.client_id)
-    if (target) {
-      target.is_connected = true
-      target.is_online = true
-    }
-  })
+  if (!isTauri()) {
+    return
+  }
 
-  unlistenDisconnected = await listen<any>('device_disconnected', (e) => {
-    const target = clients.value.find(c => c.client_id === e.payload.client_id)
-    if (target && target.is_connected) {
-      alert(`设备 [${e.payload.client_name}] 已断开连接`)
-      target.is_connected = false
-    }
-  })
+  unlistenConnected = await listen<{ client_id: string; client_name: string }>(
+    'device_connected',
+    (event) => {
+      const target = clients.value.find((client) => client.client_id === event.payload.client_id)
+
+      if (target) {
+        target.is_connected = true
+        target.is_online = true
+      }
+    },
+  )
+
+  unlistenDisconnected = await listen<{ client_id: string; client_name: string }>(
+    'device_disconnected',
+    (event) => {
+      const target = clients.value.find((client) => client.client_id === event.payload.client_id)
+
+      if (target) {
+        target.is_connected = false
+      }
+    },
+  )
 })
 
 onUnmounted(() => {
-  if (unlistenConnected) unlistenConnected()
-  if (unlistenDisconnected) unlistenDisconnected()
+  unlistenConnected?.()
+  unlistenDisconnected?.()
 })
 </script>
 
 <template>
-  <div class="glass-panel fade-in list-container">
-    <div class="header">
-      <h2>设备管理</h2>
-      <button class="btn-refresh" @click="fetchClients">
-        <span class="refresh-icon">⟳</span> 探测刷新
-      </button>
-    </div>
+  <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
+    <section class="apple-section rounded-[2.5rem] px-8 py-10 lg:px-12">
+      <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <div class="max-w-3xl space-y-4">
+          <Badge variant="outline" class="w-fit rounded-full">设备管理</Badge>
+          <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
+            哪些设备已受信、哪些设备在线、哪些设备正在占用控制权，一眼看清。
+          </h2>
+          <p class="text-base leading-7 text-muted-foreground">
+            这一页不再追求“管理后台”的堆砌感，而是像产品页一样，把最关键的状态压缩成更高密度的信息卡片。
+          </p>
+        </div>
 
-    <div v-if="loading" class="empty-state">
-      <div class="loading-spinner"></div>
-      <span style="margin-left: 12px">正在探测设备在线状态...</span>
-    </div>
-    <div v-else-if="clients.length === 0" class="empty-state">
-      <p style="color: var(--text-muted);">当前暂无受信任的控制设备。请在手机端发送配对请求。</p>
-    </div>
-    <div v-else class="client-list">
-      <div
-        v-for="c in clients"
-        :key="c.client_id"
-        class="client-card"
-        :class="{ 'card-online': c.is_online }"
-      >
-        <div class="client-left">
-          <div class="status-dot" :class="c.is_online ? 'dot-online' : 'dot-offline'"></div>
-          <div class="client-icon" :class="{ 'icon-online': c.is_online }">📱</div>
-          <div class="details">
-            <h3>
-              {{ c.client_name }}
-              <span v-if="c.is_connected" class="tag-connected">已连接控制</span>
-              <span v-else-if="c.is_online" class="tag-online">在线</span>
-              <span v-else class="tag-offline">离线</span>
-            </h3>
-            <span class="id-badge">ID: {{ c.client_id.substring(0, 8) }}... · IP: {{ c.last_ip || '未知' }}</span>
+        <Button variant="outline" class="w-fit rounded-full" @click="fetchClients">
+          <RefreshCw class="size-4" />
+          重新检测
+        </Button>
+      </div>
+    </section>
+
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_340px]">
+      <Card class="apple-section">
+        <CardHeader class="gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <Badge class="rounded-full">{{ clients.length }} 台受信设备</Badge>
+            <Badge variant="secondary" class="rounded-full">{{ onlineCount }} 台在线</Badge>
+            <Badge variant="outline" class="rounded-full">{{ connectedCount }} 台已连接</Badge>
           </div>
-        </div>
-        <div class="client-actions">
-          <button class="btn-forget" @click="forgetDevice(c)">忘记设备</button>
-        </div>
+          <div class="space-y-2">
+            <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
+              设备列表
+            </CardTitle>
+            <CardDescription>
+              每张卡片只保留设备身份、网络状态与最近活跃时间。
+            </CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent class="grid gap-4">
+          <div
+            v-if="loading"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            正在刷新设备在线状态，请稍候。
+          </div>
+
+          <article
+            v-for="client in clients"
+            v-else
+            :key="client.client_id"
+            class="rounded-[1.75rem] border border-border/70 bg-background/70 p-5"
+          >
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div class="flex items-start gap-4">
+                <div
+                  class="flex size-12 items-center justify-center rounded-full border border-border/70 bg-accent/60"
+                >
+                  <Smartphone class="size-5 text-primary" />
+                </div>
+
+                <div class="space-y-3">
+                  <div class="space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                        {{ client.client_name }}
+                      </h3>
+                      <Badge v-if="client.is_connected" class="rounded-full">已连接</Badge>
+                      <Badge v-else-if="client.is_online" variant="secondary" class="rounded-full">
+                        在线
+                      </Badge>
+                      <Badge v-else variant="outline" class="rounded-full">离线</Badge>
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                      设备 ID：{{ client.client_id }}
+                    </p>
+                  </div>
+
+                  <div class="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                    <p>最近活跃：{{ formatLastSeen(client.last_seen_at) }}</p>
+                    <p>最近 IP：{{ client.last_ip || '未知' }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="outline"
+                  class="rounded-full"
+                  size="sm"
+                  @click="forgetDevice(client)"
+                >
+                  <Unplug class="size-4" />
+                  忘记设备
+                </Button>
+              </div>
+            </div>
+          </article>
+
+          <div
+            v-if="!loading && clients.length === 0"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            当前还没有受信任的移动端设备，可以先从手机端发起配对。
+          </div>
+        </CardContent>
+      </Card>
+
+      <div class="flex flex-col gap-6">
+        <Card class="apple-section apple-inverse border-0">
+          <CardHeader class="gap-3">
+            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">同步关系</Badge>
+            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
+              当前连接并不等于永久受信。
+            </CardTitle>
+            <CardDescription class="text-white/70">
+              “在线”表示网络层可达，“已连接”表示当前会话正在使用控制能力。
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4 text-sm leading-6 text-white/74">
+            <div class="flex items-start gap-3">
+              <Link2 class="mt-0.5 size-4 text-white/80" />
+              <p>受信关系长期保存，连接关系按当前会话实时变化。</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
+              <p>忘记设备时会先尝试通知移动端断开，然后再删除配对记录。</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
-  </div>
+  </section>
 </template>
-
-<style scoped>
-.list-container {
-  padding: 2rem;
-  border-radius: var(--radius-lg);
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-.header h2 {
-  margin: 0;
-}
-.btn-refresh {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  padding: 6px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-.btn-refresh:hover {
-  background: var(--bg-hover);
-}
-.refresh-icon {
-  font-size: 16px;
-}
-.empty-state {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed var(--border-color);
-  border-radius: 12px;
-  background: rgba(0,0,0,0.02);
-}
-.loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--text-primary);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.client-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-}
-.client-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--bg-primary);
-  transition: all 0.25s ease;
-}
-.card-online {
-  border-color: rgba(76, 175, 80, 0.35);
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.04), transparent);
-}
-.client-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
-.client-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-online {
-  background: #4CAF50;
-  box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
-}
-.dot-offline {
-  background: #bdbdbd;
-}
-.client-icon {
-  font-size: 22px;
-  background: #e3f2fd;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-}
-.icon-online {
-  background: #e8f5e9;
-}
-.details h3 {
-  margin: 0 0 4px 0;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.id-badge {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.tag-connected {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #4CAF50;
-  color: #fff;
-  font-weight: 500;
-}
-.tag-online {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #e8f5e9;
-  color: #4CAF50;
-  font-weight: 500;
-}
-.tag-offline {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #f5f5f5;
-  color: #9e9e9e;
-  font-weight: 500;
-}
-.client-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.btn-connect {
-  background: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid rgba(76, 175, 80, 0.3);
-  padding: 6px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-.btn-connect:hover {
-  background: #c8e6c9;
-}
-.btn-disconnect {
-  background: #fff3e0;
-  color: #e65100;
-  border-color: rgba(230, 81, 0, 0.3);
-}
-.btn-disconnect:hover {
-  background: #ffe0b2;
-}
-.btn-forget {
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-.btn-forget:hover {
-  background: #ffebee;
-  color: #d32f2f;
-  border-color: rgba(211, 47, 47, 0.3);
-}
-</style>

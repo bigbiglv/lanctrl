@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { mdiLoading, mdiPlay, mdiStop } from '@mdi/js'
+import { Badge } from '../../../components/ui/badge/index'
+import { Button } from '../../../components/ui/button/index'
 import MorphIcon from '../../../components/common/MorphIcon.vue'
 import type { ActionFeatureDefinition } from '../types'
 
@@ -20,14 +22,8 @@ const emit = defineEmits<Emits>()
 
 const isHovered = ref(false)
 
-const toneClass = computed(() => (feature.control.tone === 'danger' ? 'danger' : 'primary'))
+const iconPaths = [mdiPlay, mdiLoading, mdiStop]
 
-/**
- * 状态定义:
- * 0: 等待执行 (Play)
- * 1: 执行中 / 终止中 (Loading/Spinner)
- * 2: 终止执行 (Stop)
- */
 const iconIndex = computed(() => {
   if (stopping) return 1
   if (!pending) return 0
@@ -35,182 +31,87 @@ const iconIndex = computed(() => {
 })
 
 const buttonText = computed(() => {
-  if (stopping) return '终止中...'
+  if (stopping) return '正在终止…'
   if (!pending) return feature.control.buttonText
-  return isHovered.value ? '终止执行' : '执行中...'
+  return isHovered.value ? '终止执行' : '执行中…'
 })
 
-// SVG paths from @mdi/js
-const iconPaths = [
-  mdiPlay, // Play
-  mdiLoading, // Loading
-  mdiStop, // Stop
-]
+const badgeVariant = computed(() => (feature.control.tone === 'danger' ? 'destructive' : 'secondary'))
+const buttonVariant = computed(() =>
+  pending || stopping ? 'secondary' : feature.control.tone === 'danger' ? 'destructive' : 'default',
+)
 
-const handleClick = () => {
-  if (stopping) return
+function handleClick() {
+  if (stopping) {
+    return
+  }
+
   if (pending) {
     emit('cancel', feature)
-  } else {
-    emit('execute', feature)
+    return
   }
+
+  emit('execute', feature)
 }
 </script>
 
 <template>
-  <article class="feature-card glass-panel">
-    <div class="card-header">
-      <div>
-        <h3>{{ feature.title }}</h3>
-        <p>{{ feature.description }}</p>
-      </div>
-    </div>
+  <article class="rounded-[1.75rem] border border-border/70 bg-background/70 p-6">
+    <div class="flex h-full flex-col gap-6">
+      <div class="space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <Badge :variant="badgeVariant" class="rounded-full">
+            {{ feature.control.tone === 'danger' ? '高风险动作' : '即时动作' }}
+          </Badge>
+          <Badge v-if="feature.mobileReady" variant="outline" class="rounded-full">移动端可复用</Badge>
+        </div>
 
-    <div class="card-footer">
-      <button
-        class="action-button"
-        :class="[toneClass, { 'is-pending': pending, 'is-stopping': stopping }]"
-        :disabled="stopping"
-        @click="handleClick"
-        @mouseenter="isHovered = true"
-        @mouseleave="isHovered = false"
-      >
-        <MorphIcon
-          :paths="iconPaths"
-          :active-index="iconIndex"
-          size="1.2rem"
-          class="button-icon"
-          :class="{ 'spin-animation': iconIndex === 1 }"
-        />
-        <span>{{ buttonText }}</span>
-      </button>
+        <div class="space-y-2">
+          <h3 class="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+            {{ feature.title }}
+          </h3>
+          <p class="text-sm leading-6 text-muted-foreground">{{ feature.description }}</p>
+        </div>
+      </div>
+
+      <div class="mt-auto flex items-center justify-between gap-4">
+        <p class="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+          {{ pending ? 'Action in progress' : 'Ready to execute' }}
+        </p>
+
+        <Button
+          :variant="buttonVariant"
+          class="min-w-[164px] rounded-full"
+          :class="{
+            'feature-action-button': true,
+            'is-pending': pending,
+          }"
+          :disabled="stopping"
+          @click="handleClick"
+          @mouseenter="isHovered = true"
+          @mouseleave="isHovered = false"
+        >
+          <MorphIcon
+            :paths="iconPaths"
+            :active-index="iconIndex"
+            size="1.1rem"
+            class="feature-action-icon"
+            :class="{ 'animate-spin': iconIndex === 1 }"
+          />
+          <span>{{ buttonText }}</span>
+        </Button>
+      </div>
     </div>
   </article>
 </template>
 
-<style scoped lang="scss">
-.feature-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  min-height: 220px;
-  border: 1px solid var(--border-color);
+<style scoped>
+.feature-action-button.is-pending {
+  background: color-mix(in oklab, var(--primary) 18%, var(--secondary));
+  color: var(--foreground);
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-
-  h3 {
-    font-size: 1.25rem;
-    margin-bottom: 0.5rem;
-    color: var(--text-main);
-  }
-
-  p {
-    color: var(--text-muted);
-    line-height: 1.6;
-  }
-}
-
-.card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1rem;
-}
-
-.action-button {
-  min-width: 140px;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 0.8rem 1.2rem;
-  color: var(--color-white);
-  font-weight: 700;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-
-  .button-icon {
-    &.spin-animation {
-      animation: spin 2s linear infinite;
-    }
-  }
-
-  &.primary {
-    background: var(--color-action-idle);
-  }
-
-  &.danger {
-    background: var(--color-action-terminate);
-  }
-
-  &.is-pending {
-    background: linear-gradient(
-      270deg,
-      var(--color-action-running-1),
-      var(--color-action-running-2),
-      var(--color-action-running-1)
-    );
-    background-size: 200% 100%;
-    animation: gradient-shift 3s ease infinite;
-
-    &:not(:hover) {
-      opacity: 0.9;
-      cursor: wait;
-    }
-
-    &:hover {
-      background: var(--color-action-terminate);
-      background-size: 100% 100%;
-      animation: none;
-    }
-  }
-
-  &.is-stopping {
-    cursor: wait;
-    background: linear-gradient(
-      270deg,
-      var(--color-action-stopping-1),
-      var(--color-action-stopping-2),
-      var(--color-action-stopping-1)
-    );
-    background-size: 200% 100%;
-    animation: gradient-shift 2s linear infinite;
-  }
-
-  &:hover:not(.is-pending):not(.is-stopping) {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px color-mix(in srgb, var(--color-black) 12%, transparent);
-    filter: brightness(1.1);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+.feature-action-icon {
+  display: inline-flex;
 }
 </style>
-

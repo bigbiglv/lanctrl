@@ -1,54 +1,50 @@
 <script setup lang="ts">
-import Sidebar from './Sidebar.vue'
 import TopBar from './TopBar.vue'
 </script>
 
 <template>
-  <div class="app-layout">
-    <Sidebar />
-    <main class="main-content">
-      <TopBar />
-      <div class="content-area">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </div>
+  <div class="layout-shell">
+    <TopBar />
+
+    <main class="layout-main">
+      <router-view v-slot="{ Component }">
+        <transition name="route-fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
   </div>
 </template>
 
-<style scoped lang="scss">
-.app-layout {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  padding: 1.5rem;
-  gap: 1.5rem;
-}
-
-.main-content {
-  flex: 1;
+<style scoped>
+.layout-shell {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  min-height: 100vh;
 }
 
-.content-area {
+.layout-main {
   flex: 1;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  position: relative;
+  overflow: auto;
+  padding: 1.5rem 2rem 2rem;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity var(--transition-fast);
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.route-fade-enter-from,
+.route-fade-leave-to {
   opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (max-width: 720px) {
+  .layout-main {
+    padding-inline: 1rem;
+  }
 }
 </style>
