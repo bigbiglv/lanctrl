@@ -54,5 +54,5 @@ jobs:
         with:
           name: lanctrl-PC-Windows
           path: |
-            lanctrl-pc/lanctrl-ui/src-tauri/target/release/bundle/msi/*.msi
-            lanctrl-pc/lanctrl-ui/src-tauri/target/release/bundle/nsis/*.exe
+            lanctrl-pc/target/release/bundle/msi/*.msi
+            lanctrl-pc/target/release/bundle/nsis/*.exe
