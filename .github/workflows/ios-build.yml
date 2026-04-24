@@ -1,9 +1,12 @@
 name: Build iOS Unsigned IPA
 
 on:
-  # 当提交代码到 main 或 master 分支时自动触发
+  # 当提交代码到 main 或 master 分支，且是移动端相关代码改动时自动触发
   push:
     branches: [ "main", "master" ]
+    paths:
+      - 'lanctrl-mobile/**'
+      - '.github/workflows/ios-build.yml'
   # 允许在 GitHub 网页端手动点击按钮触发
   workflow_dispatch:
 

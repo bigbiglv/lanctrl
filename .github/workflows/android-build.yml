@@ -1,0 +1,47 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'lanctrl-mobile/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    # 相比 mac，ubuntu 打包安卓更快且完全免费
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 配置 Java 环境 (Android 构建需要)
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+        working-directory: ./lanctrl-mobile
+
+      # 编译 Android 的 release 版本 APK
+      - name: Build APK
+        run: flutter build apk --release
+        working-directory: ./lanctrl-mobile
+
+      # 上传 APK 附件
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanctrl-Android-APK
+          path: lanctrl-mobile/build/app/outputs/flutter-apk/app-release.apk

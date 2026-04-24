@@ -1,0 +1,58 @@
+name: Build PC Windows App
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'lanctrl-pc/**'
+      - '.github/workflows/pc-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-pc:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. 设置 Node.js 环境
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 2. 设置 pnpm 环境
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      # 3. 安装前端依赖
+      - name: Install Frontend Dependencies
+        run: pnpm install
+        working-directory: ./lanctrl-pc/lanctrl-ui
+
+      # 4. 设置 Rust 环境 (Tauri 后端必需)
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # 5. 为了避免在没有显示器(CI)的 Windows 环境下可能出现的 UI 资源问题，安装额外的 C++ 构建工具补充
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1.3
+
+      # 6. 使用 Tauri 编译打包
+      - name: Build Tauri App
+        run: pnpm run tauri build
+        working-directory: ./lanctrl-pc/lanctrl-ui
+
+      # 7. 上传生成的 exe/msi 安装包 (不同配置生成的格式不同，用通配符把安装包都传上来)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lanctrl-PC-Windows
+          path: |
+            lanctrl-pc/lanctrl-ui/src-tauri/target/release/bundle/msi/*.msi
+            lanctrl-pc/lanctrl-ui/src-tauri/target/release/bundle/nsis/*.exe
