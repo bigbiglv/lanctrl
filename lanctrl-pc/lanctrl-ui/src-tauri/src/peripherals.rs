@@ -32,7 +32,7 @@ pub fn init_state() -> WatcherState {
 
 fn fetch_devices() -> Result<Vec<PeripheralDevice>, String> {
     let mut cmd = Command::new("powershell");
-    
+
     // Quick PnP parsing for Keyboard, Mouse, and generic USB ports.
     cmd.args(&[
         "-NoProfile",
@@ -68,14 +68,17 @@ pub async fn get_peripheral_devices() -> Result<Vec<PeripheralDevice>, String> {
 }
 
 #[tauri::command]
-pub async fn start_device_watch(app: AppHandle, state: State<'_, WatcherState>) -> Result<(), String> {
+pub async fn start_device_watch(
+    app: AppHandle,
+    state: State<'_, WatcherState>,
+) -> Result<(), String> {
     if !state.watching.load(Ordering::SeqCst) {
         state.watching.store(true, Ordering::SeqCst);
         let watching = state.watching.clone();
-        
+
         tauri::async_runtime::spawn(async move {
             let mut last_devices = vec![];
-            
+
             while watching.load(Ordering::SeqCst) {
                 if let Ok(devices) = fetch_devices() {
                     // Primitive deep diff via PartialEq

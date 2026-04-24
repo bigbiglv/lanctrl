@@ -57,6 +57,7 @@ pub struct FeatureSnapshot {
 pub enum FeatureCommand {
     Shutdown,
     Restart,
+    TestNotification,
     Volume { level: u8 },
 }
 
@@ -124,6 +125,17 @@ pub fn get_feature_groups() -> Vec<FeatureGroup> {
                         confirm_required: true,
                     },
                 },
+                FeatureDefinition {
+                    feature_key: "test_notification".into(),
+                    title: "测试提示".into(),
+                    description: "弹出一条提示，用于验证即时执行和定时任务链路。".into(),
+                    mobile_ready: true,
+                    control: FeatureControl::Action {
+                        button_text: "测试提示".into(),
+                        tone: FeatureTone::Primary,
+                        confirm_required: false,
+                    },
+                },
             ],
         },
         FeatureGroup {
@@ -173,6 +185,11 @@ pub fn execute_feature_command(
                 volume_level: None,
             })
         }
+        FeatureCommand::TestNotification => Ok(FeatureExecutionResult {
+            feature_key: "test_notification".into(),
+            message: "测试提示已触发。".into(),
+            volume_level: None,
+        }),
         FeatureCommand::Volume { level } => {
             let applied_level = system::set_system_volume(level)?;
             Ok(FeatureExecutionResult {
@@ -199,6 +216,7 @@ mod tests {
 
         assert!(feature_keys.contains(&"shutdown"));
         assert!(feature_keys.contains(&"restart"));
+        assert!(feature_keys.contains(&"test_notification"));
         assert!(feature_keys.contains(&"volume"));
         assert!(groups
             .iter()

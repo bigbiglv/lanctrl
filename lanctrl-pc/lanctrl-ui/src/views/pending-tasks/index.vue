@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { BellRing, Clock3, Inbox } from 'lucide-vue-next'
+import { Clock3, LaptopMinimal, Smartphone } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { Badge } from '../../components/ui/badge/index'
 import {
   Card,
@@ -9,11 +13,75 @@ import {
   CardTitle,
 } from '../../components/ui/card/index'
 
-const placeholderSteps = [
-  '等待设备确认的远程控制请求',
-  '等待系统完成的关键操作',
-  '等待同步结果的音量与设备扫描任务',
-]
+interface TaskOrigin {
+  kind: 'pc' | 'mobile'
+  clientId?: string | null
+  clientName: string
+}
+
+interface PendingTask {
+  taskId: string
+  title: string
+  createdAtMs: number
+  executeAtMs: number
+  origin: TaskOrigin
+  feature: string
+  level?: number | null
+}
+
+const tasks = ref<PendingTask[]>([])
+const loading = ref(true)
+
+let unlistenTasksChanged: UnlistenFn | null = null
+
+const nextTask = computed(() => tasks.value[0] ?? null)
+
+async function fetchTasks() {
+  if (!isTauri()) {
+    tasks.value = []
+    loading.value = false
+    return
+  }
+
+  try {
+    loading.value = true
+    tasks.value = await invoke<PendingTask[]>('get_pending_tasks')
+  } catch (error) {
+    console.error('Failed to load pending tasks:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatTime(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(timestamp)
+}
+
+function sourceLabel(origin: TaskOrigin) {
+  return origin.kind === 'pc' ? 'PC 本机' : origin.clientName
+}
+
+function sourceIcon(origin: TaskOrigin) {
+  return origin.kind === 'pc' ? LaptopMinimal : Smartphone
+}
+
+onMounted(async () => {
+  await fetchTasks()
+
+  if (!isTauri())
+    return
+
+  unlistenTasksChanged = await listen('scheduled_tasks_changed', () => void fetchTasks())
+})
+
+onUnmounted(() => {
+  unlistenTasksChanged?.()
+})
 </script>
 
 <template>
@@ -22,55 +90,94 @@ const placeholderSteps = [
       <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">待处理任务</Badge>
       <div class="mt-4 max-w-3xl space-y-4">
         <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white lg:text-5xl">
-          所有等待中的操作，都会集中显示在这里。
+          所有等待执行的任务都带上来源，能直接看出是 PC 自己建的，还是哪台移动端发起的。
         </h2>
         <p class="text-base leading-7 text-white/70">
-          当设备确认、系统执行或状态同步仍在处理中时，你可以在这里快速查看当前进度。
+          任务数据以 PC 为唯一权威。移动端收到 WebSocket 同步事件后，会回拉这份同一任务列表。
         </p>
       </div>
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_360px]">
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_360px]">
       <Card class="apple-section">
         <CardHeader class="gap-3">
-          <Badge variant="outline" class="w-fit rounded-full">当前任务</Badge>
+          <Badge variant="outline" class="w-fit rounded-full">{{ tasks.length }} 个待执行</Badge>
           <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-            待处理内容
+            执行队列
           </CardTitle>
           <CardDescription>
-            这里会显示仍需等待结果的关键操作。
+            这里展示还没真正落地执行的定时任务。来源字段用于定位是谁创建了它。
           </CardDescription>
         </CardHeader>
         <CardContent class="grid gap-4">
+          <div
+            v-if="loading"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            正在同步任务队列…
+          </div>
+
           <article
-            v-for="step in placeholderSteps"
-            :key="step"
+            v-for="task in tasks"
+            v-else
+            :key="task.taskId"
             class="rounded-[1.5rem] border border-border/70 bg-background/70 p-5"
           >
-            <div class="flex items-start gap-3">
-              <Inbox class="mt-0.5 size-4 text-primary" />
-              <p class="text-sm leading-6 text-foreground">{{ step }}</p>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                    {{ task.title }}
+                  </h3>
+                  <Badge variant="secondary" class="rounded-full">
+                    {{ task.feature }}
+                  </Badge>
+                </div>
+                <div class="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                  <p>创建时间：{{ formatTime(task.createdAtMs) }}</p>
+                  <p>执行时间：{{ formatTime(task.executeAtMs) }}</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 rounded-full border border-border/70 px-3 py-2 text-sm text-muted-foreground">
+                <component :is="sourceIcon(task.origin)" class="size-4 text-primary" />
+                <span>来源：{{ sourceLabel(task.origin) }}</span>
+              </div>
             </div>
           </article>
+
+          <div
+            v-if="!loading && tasks.length === 0"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            队列里还是空的。
+          </div>
         </CardContent>
       </Card>
 
       <Card class="apple-section">
         <CardHeader class="gap-2">
           <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
-            状态提示
+            队首任务
           </CardTitle>
-          <CardDescription>常见等待状态会在这里集中展示。</CardDescription>
+          <CardDescription>最先执行的任务会优先显示在这里。</CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 text-sm text-muted-foreground">
-          <div class="flex items-start gap-3">
-            <Clock3 class="mt-0.5 size-4 text-primary" />
-            <p>等待执行、等待确认与等待同步会分别标记。</p>
-          </div>
-          <div class="flex items-start gap-3">
-            <BellRing class="mt-0.5 size-4 text-primary" />
-            <p>需要你再次确认的操作会有更明确的提醒。</p>
-          </div>
+          <template v-if="nextTask">
+            <div class="flex items-start gap-3">
+              <Clock3 class="mt-0.5 size-4 text-primary" />
+              <p>{{ nextTask.title }}</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <Clock3 class="mt-0.5 size-4 text-primary" />
+              <p>预计执行：{{ formatTime(nextTask.executeAtMs) }}</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <component :is="sourceIcon(nextTask.origin)" class="mt-0.5 size-4 text-primary" />
+              <p>任务来源：{{ sourceLabel(nextTask.origin) }}</p>
+            </div>
+          </template>
+          <p v-else>当前没有待执行任务。</p>
         </CardContent>
       </Card>
     </div>

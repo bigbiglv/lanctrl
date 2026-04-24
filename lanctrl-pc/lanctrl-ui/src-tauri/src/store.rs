@@ -1,3 +1,4 @@
+use lanctrl_scheduler::{current_timestamp_ms, ScheduledTask, TaskOrigin};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -5,6 +6,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+const TASK_HISTORY_LIMIT: usize = 200;
+
+fn default_mdns_enabled() -> bool {
+    true
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PairedClient {
@@ -17,23 +24,74 @@ pub struct PairedClient {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskHistoryStatus {
+    Queued,
+    Cancelled,
+    Executed,
+    Failed,
+    ManualExecuted,
+    ManualFailed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskHistoryEntry {
+    pub entry_id: String,
+    pub task_id: Option<String>,
+    pub title: String,
+    pub origin: TaskOrigin,
+    pub status: TaskHistoryStatus,
+    pub recorded_at_ms: u64,
+    pub detail: String,
+}
+
+impl TaskHistoryEntry {
+    pub fn new(
+        task_id: Option<String>,
+        title: impl Into<String>,
+        origin: TaskOrigin,
+        status: TaskHistoryStatus,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            entry_id: Uuid::new_v4().to_string(),
+            task_id,
+            title: title.into(),
+            origin,
+            status,
+            recorded_at_ms: current_timestamp_ms(),
+            detail: detail.into(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     pub device_id: String,
     pub device_name: String,
     pub paired_clients: HashMap<String, PairedClient>,
+    #[serde(default)]
+    pub scheduled_tasks: Vec<ScheduledTask>,
+    #[serde(default)]
+    pub task_history: Vec<TaskHistoryEntry>,
+    #[serde(default = "default_mdns_enabled")]
+    pub mdns_enabled: bool,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
-        // 跨平台获取设备名兜底策略
         let hostname = std::env::var("COMPUTERNAME")
             .or_else(|_| std::env::var("USER"))
             .unwrap_or_else(|_| "LanCtrl-PC".to_string());
-            
+
         Self {
             device_id: Uuid::new_v4().to_string(),
             device_name: hostname,
             paired_clients: HashMap::new(),
+            scheduled_tasks: Vec::new(),
+            task_history: Vec::new(),
+            mdns_enabled: true,
         }
     }
 }
@@ -72,7 +130,6 @@ impl Store {
         if let Some(path) = &self.config_path {
             if path.exists() {
                 if let Ok(content) = fs::read_to_string(path) {
-                    // 若存在，且解析成功，覆盖掉默认初始化的配置
                     if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
                         self.data = config;
                         return true;
@@ -80,7 +137,6 @@ impl Store {
                 }
             }
         }
-        // 如果不存在配置文件则强制走一次写入保存
         self.save();
         false
     }
@@ -97,7 +153,6 @@ impl Store {
         false
     }
 
-    // Auth actions
     pub fn is_client_paired(&self, client_id: &str, token_hash: &str) -> bool {
         if let Some(client) = self.data.paired_clients.get(client_id) {
             return client.token_hash == token_hash;
@@ -106,12 +161,53 @@ impl Store {
     }
 
     pub fn add_paired_client(&mut self, client: PairedClient) {
-        self.data.paired_clients.insert(client.client_id.clone(), client);
+        self.data
+            .paired_clients
+            .insert(client.client_id.clone(), client);
         self.save();
     }
 
     pub fn remove_paired_client(&mut self, client_id: &str) {
         self.data.paired_clients.remove(client_id);
+        self.save();
+    }
+
+    pub fn upsert_scheduled_task(&mut self, task: ScheduledTask) {
+        self.data
+            .scheduled_tasks
+            .retain(|existing| existing.task_id != task.task_id);
+        self.data.scheduled_tasks.push(task);
+        self.data
+            .scheduled_tasks
+            .sort_by_key(|scheduled_task| scheduled_task.execute_at_ms);
+        self.save();
+    }
+
+    pub fn take_scheduled_task(&mut self, task_id: &str) -> Option<ScheduledTask> {
+        let index = self
+            .data
+            .scheduled_tasks
+            .iter()
+            .position(|scheduled_task| scheduled_task.task_id == task_id)?;
+        let task = self.data.scheduled_tasks.remove(index);
+        self.save();
+        Some(task)
+    }
+
+    pub fn append_task_history(&mut self, entry: TaskHistoryEntry) {
+        self.data.task_history.insert(0, entry);
+        if self.data.task_history.len() > TASK_HISTORY_LIMIT {
+            self.data.task_history.truncate(TASK_HISTORY_LIMIT);
+        }
+        self.save();
+    }
+
+    pub fn list_task_history(&self) -> Vec<TaskHistoryEntry> {
+        self.data.task_history.clone()
+    }
+
+    pub fn set_mdns_enabled(&mut self, enabled: bool) {
+        self.data.mdns_enabled = enabled;
         self.save();
     }
 }

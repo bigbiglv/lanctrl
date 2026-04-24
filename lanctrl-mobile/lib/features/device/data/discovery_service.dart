@@ -1,76 +1,151 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:nsd/nsd.dart' as nsd_pkg;
-import '../../../core/storage/storage_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nsd/nsd.dart' as nsd;
+
+import '../../../core/storage/storage_service.dart';
+import '../../app/domain/app_models.dart';
+
 class LanDevice {
+  const LanDevice({
+    required this.deviceId,
+    required this.name,
+    required this.ip,
+    required this.port,
+  });
+
   final String deviceId;
   final String name;
   final String ip;
   final int port;
-
-  LanDevice(this.deviceId, this.name, this.ip, this.port);
 }
 
 class DiscoveryService {
-  final StorageService storage;
-  nsd_pkg.Discovery? _discovery;
-  final StreamController<List<LanDevice>> _controller = StreamController.broadcast();
-  List<LanDevice> _foundDevices = [];
+  DiscoveryService(this._storage);
 
-  DiscoveryService(this.storage);
+  final StorageService _storage;
+  final StreamController<List<LanDevice>> _controller =
+      StreamController<List<LanDevice>>.broadcast();
+
+  nsd.Discovery? _discovery;
+  VoidCallback? _listener;
 
   Stream<List<LanDevice>> get devicesStream => _controller.stream;
 
   Future<void> start() async {
-    _foundDevices = [];
-    _controller.add(_foundDevices);
-    
-    _discovery = await nsd_pkg.startDiscovery('_lanctrl._tcp', ipLookupType: nsd_pkg.IpLookupType.v4);
-    _discovery!.addListener(() {
-      _foundDevices = [];
-      print('NSD Discovery listener triggered, found ${_discovery!.services.length} services');
-      for (var service in _discovery!.services) {
-        print('Found service: ${service.name}, type: ${service.type}, host: ${service.host}, port: ${service.port}');
-        if (service.txt != null && service.txt!.containsKey('deviceId')) {
-          try {
-            // TXT values are commonly Uint8List in nsd
-            final deviceId = utf8.decode(service.txt!['deviceId']!);
-            final deviceName = service.txt!.containsKey('deviceName') 
-                ? utf8.decode(service.txt!['deviceName']!) 
-                : 'Unknown PC';
-            
-            final ip = service.host ?? '';
-            final port = service.port ?? 3000;
+    if (_discovery != null) {
+      _emitDevices();
+      return;
+    }
 
-            if (ip.isNotEmpty) {
-              _foundDevices.add(LanDevice(deviceId, deviceName, ip, port));
-              
-              // 自动识别由于局域网路由造成的动态 IP 变动并覆写维持失联设备状态
-              var known = storage.getDevice(deviceId);
-              if (known.isNotEmpty && known['ip'] != ip) {
-                storage.saveDevice(deviceId, deviceName, ip, port);
-              }
-            }
-          } catch(e) {
-            // 解析错误则略过异常设备
-          }
-        }
-      }
-      _controller.add(List.from(_foundDevices));
-    });
+    _controller.add(const <LanDevice>[]);
+
+    _discovery = await nsd.startDiscovery(
+      '_lanctrl._tcp',
+      ipLookupType: nsd.IpLookupType.any,
+    );
+
+    _listener = _emitDevices;
+    _discovery?.addListener(_listener!);
+    _emitDevices();
   }
 
   Future<void> stop() async {
     if (_discovery != null) {
-      await nsd_pkg.stopDiscovery(_discovery!);
+      if (_listener != null) {
+        _discovery?.removeListener(_listener!);
+      }
+      await nsd.stopDiscovery(_discovery!);
       _discovery = null;
+      _listener = null;
     }
+  }
+
+  void _emitDevices() {
+    final discovery = _discovery;
+    if (discovery == null) {
+      _controller.add(const <LanDevice>[]);
+      return;
+    }
+
+    final devicesById = <String, LanDevice>{};
+    for (final service in discovery.services) {
+      final txt = service.txt;
+      if (txt == null || !txt.containsKey('deviceId')) {
+        continue;
+      }
+
+      try {
+        final rawDeviceId = txt['deviceId'];
+        if (rawDeviceId == null) {
+          continue;
+        }
+
+        final deviceId = utf8.decode(rawDeviceId);
+        final deviceName = txt['deviceName'] != null
+            ? utf8.decode(txt['deviceName']!)
+            : (service.name ?? '未知电脑');
+        final endpoint = _resolveEndpoint(service);
+        final port = service.port ?? 3000;
+
+        if (endpoint == null || endpoint.isEmpty) {
+          continue;
+        }
+
+        final device = LanDevice(
+          deviceId: deviceId,
+          name: deviceName,
+          ip: endpoint,
+          port: port,
+        );
+        devicesById[deviceId] = device;
+
+        final knownDevice = KnownDevice.fromMap(_storage.getDevice(deviceId));
+        if (knownDevice.deviceId.isNotEmpty &&
+            (knownDevice.ip != endpoint ||
+                knownDevice.port != port ||
+                knownDevice.name != deviceName)) {
+          _storage.saveDevice(deviceId, deviceName, endpoint, port);
+        }
+      } catch (error, stackTrace) {
+        debugPrint('局域网设备解析失败: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
+
+    _controller.add(devicesById.values.toList(growable: false));
+  }
+
+  String? _resolveEndpoint(nsd.Service service) {
+    final addresses = service.addresses;
+    if (addresses != null && addresses.isNotEmpty) {
+      for (final address in addresses) {
+        if (address.type.name == 'IPv4' &&
+            !address.address.startsWith('127.') &&
+            !address.address.startsWith('169.254.')) {
+          return address.address;
+        }
+      }
+
+      for (final address in addresses) {
+        if (!address.address.startsWith('127.') &&
+            !address.address.startsWith('169.254.')) {
+          return address.address;
+        }
+      }
+    }
+
+    final host = service.host;
+    if (host == null || host.isEmpty) {
+      return null;
+    }
+
+    return host.endsWith('.') ? host.substring(0, host.length - 1) : host;
   }
 }
 
 final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
-  final storage = ref.watch(storageServiceProvider);
-  return DiscoveryService(storage);
+  return DiscoveryService(ref.watch(storageServiceProvider));
 });

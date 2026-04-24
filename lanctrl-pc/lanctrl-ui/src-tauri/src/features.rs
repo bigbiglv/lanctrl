@@ -1,8 +1,21 @@
+use lanctrl_scheduler::TaskOrigin;
 use lanctrl_service::{
     execute_feature_command as dispatch_feature_command, get_feature_groups as load_feature_groups,
     get_feature_snapshot as load_feature_snapshot, FeatureCommand, FeatureExecutionResult,
     FeatureGroup, FeatureSnapshot,
 };
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
+use crate::store::{TaskHistoryEntry, TaskHistoryStatus, GLOBAL_STORE};
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureNoticePayload {
+    pub title: String,
+    pub message: String,
+    pub tone: String,
+}
 
 #[tauri::command]
 pub fn get_feature_groups() -> Result<Vec<FeatureGroup>, String> {
@@ -15,6 +28,90 @@ pub fn get_feature_snapshot() -> Result<FeatureSnapshot, String> {
 }
 
 #[tauri::command]
-pub fn execute_feature_command(command: FeatureCommand) -> Result<FeatureExecutionResult, String> {
-    dispatch_feature_command(command).map_err(|error| error.to_string())
+pub fn execute_feature_command(
+    app: AppHandle,
+    command: FeatureCommand,
+) -> Result<FeatureExecutionResult, String> {
+    execute_feature_command_with_origin(&app, command, TaskOrigin::pc(), None)
+}
+
+pub fn execute_feature_command_with_origin(
+    app: &AppHandle,
+    command: FeatureCommand,
+    origin: TaskOrigin,
+    task_id: Option<String>,
+) -> Result<FeatureExecutionResult, String> {
+    let result = dispatch_feature_command(command.clone()).map_err(|error| {
+        if task_id.is_none() {
+            record_feature_history(
+                None,
+                &command,
+                origin.clone(),
+                TaskHistoryStatus::ManualFailed,
+                error.to_string(),
+                app,
+            );
+        }
+        error.to_string()
+    })?;
+
+    if let Some(payload) = build_notice_payload(&command, &result) {
+        let _ = app.emit("feature_notice", payload);
+    }
+
+    if task_id.is_none() {
+        record_feature_history(
+            None,
+            &command,
+            origin,
+            TaskHistoryStatus::ManualExecuted,
+            result.message.clone(),
+            app,
+        );
+    }
+
+    Ok(result)
+}
+
+fn record_feature_history(
+    task_id: Option<String>,
+    command: &FeatureCommand,
+    origin: TaskOrigin,
+    status: TaskHistoryStatus,
+    detail: String,
+    app: &AppHandle,
+) {
+    let mut store = GLOBAL_STORE.lock().unwrap();
+    store.append_task_history(TaskHistoryEntry::new(
+        task_id,
+        describe_command_title(command),
+        origin,
+        status,
+        detail,
+    ));
+    drop(store);
+    let _ = app.emit("task_history_changed", serde_json::json!({}));
+}
+
+fn describe_command_title(command: &FeatureCommand) -> String {
+    match command {
+        FeatureCommand::Shutdown => "关机".into(),
+        FeatureCommand::Restart => "重启".into(),
+        FeatureCommand::TestNotification => "测试通知".into(),
+        FeatureCommand::Volume { level } => format!("设置音量 {level}%"),
+    }
+}
+
+fn build_notice_payload(
+    command: &FeatureCommand,
+    result: &FeatureExecutionResult,
+) -> Option<FeatureNoticePayload> {
+    match command {
+        FeatureCommand::TestNotification => Some(FeatureNoticePayload {
+            title: "测试通知".into(),
+            message: result.message.clone(),
+            tone: "success".into(),
+        }),
+        _ => None,
+    }
 }

@@ -61,6 +61,18 @@ const mockFeatureGroups: FeatureGroup[] = [
         },
       },
       {
+        featureKey: 'test_notification',
+        title: '测试提示',
+        description: '弹出一条提示，用于验证即时执行和定时任务链路。',
+        mobileReady: true,
+        control: {
+          type: 'action',
+          buttonText: '测试提示',
+          tone: 'primary',
+          confirmRequired: false,
+        },
+      },
+      {
         featureKey: 'volume',
         title: '主音量',
         description: '调整系统主输出音量。',
@@ -185,6 +197,10 @@ async function runCommand(feature: FeatureDefinition, command: FeatureCommand) {
 function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
   if (feature.featureKey === 'shutdown') {
     return { feature: 'shutdown' }
+  }
+
+  if (feature.featureKey === 'test_notification') {
+    return { feature: 'test_notification' }
   }
 
   return { feature: 'restart' }

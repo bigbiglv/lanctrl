@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ArrowUpRight, History, ShieldCheck } from 'lucide-vue-next'
+import { CheckCircle2, CircleSlash2, History, LaptopMinimal, Smartphone, TriangleAlert } from 'lucide-vue-next'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { Badge } from '../../components/ui/badge/index'
 import {
   Card,
@@ -9,11 +13,89 @@ import {
   CardTitle,
 } from '../../components/ui/card/index'
 
-const demoTimeline = [
-  { title: '音量调整', result: '已完成', detail: '系统主音量已更新为 38%' },
-  { title: '设备移除', result: '已确认', detail: '所选设备已从当前设备列表中移除' },
-  { title: '重新启动', result: '已取消', detail: '本次操作未继续执行' },
-]
+interface TaskOrigin {
+  kind: 'pc' | 'mobile'
+  clientId?: string | null
+  clientName: string
+}
+
+interface TaskHistoryEntry {
+  entryId: string
+  taskId?: string | null
+  title: string
+  origin: TaskOrigin
+  status: 'queued' | 'cancelled' | 'executed' | 'failed' | 'manual_executed' | 'manual_failed'
+  recordedAtMs: number
+  detail: string
+}
+
+const history = ref<TaskHistoryEntry[]>([])
+const loading = ref(true)
+
+let unlistenHistoryChanged: UnlistenFn | null = null
+
+async function fetchHistory() {
+  if (!isTauri()) {
+    history.value = []
+    loading.value = false
+    return
+  }
+
+  try {
+    loading.value = true
+    history.value = await invoke<TaskHistoryEntry[]>('get_task_history_entries')
+  } catch (error) {
+    console.error('Failed to load task history:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatTime(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(timestamp)
+}
+
+function sourceLabel(origin: TaskOrigin) {
+  return origin.kind === 'pc' ? 'PC 本机' : origin.clientName
+}
+
+function sourceIcon(origin: TaskOrigin) {
+  return origin.kind === 'pc' ? LaptopMinimal : Smartphone
+}
+
+function statusMeta(status: TaskHistoryEntry['status']) {
+  switch (status) {
+    case 'queued':
+      return { label: '已入队', icon: History, tone: 'secondary' as const }
+    case 'cancelled':
+      return { label: '已取消', icon: CircleSlash2, tone: 'outline' as const }
+    case 'executed':
+    case 'manual_executed':
+      return { label: '执行成功', icon: CheckCircle2, tone: 'default' as const }
+    case 'failed':
+    case 'manual_failed':
+      return { label: '执行失败', icon: TriangleAlert, tone: 'destructive' as const }
+  }
+}
+
+onMounted(async () => {
+  await fetchHistory()
+
+  if (!isTauri())
+    return
+
+  unlistenHistoryChanged = await listen('task_history_changed', () => void fetchHistory())
+})
+
+onUnmounted(() => {
+  unlistenHistoryChanged?.()
+})
 </script>
 
 <template>
@@ -22,10 +104,10 @@ const demoTimeline = [
       <Badge variant="outline" class="w-fit rounded-full">任务记录</Badge>
       <div class="mt-4 max-w-3xl space-y-4">
         <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
-          重要操作的结果与时间，会按顺序保留在这里。
+          任务记录不仅保留结果，还会保留任务来源，方便区分是 PC 自己操作，还是哪台移动端发起的。
         </h2>
         <p class="text-base leading-7 text-muted-foreground">
-          通过任务记录，你可以快速回看最近的控制结果与处理状态。
+          这里会记录入队、取消、执行成功和执行失败。即时操作也会以 PC 本机来源进入记录。
         </p>
       </div>
     </section>
@@ -36,22 +118,52 @@ const demoTimeline = [
           <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
             最近记录
           </CardTitle>
-          <CardDescription>操作完成后，结果会出现在这里。</CardDescription>
+          <CardDescription>每一条记录都包含来源、状态、记录时间和结果说明。</CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
+          <div
+            v-if="loading"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            正在读取任务记录…
+          </div>
+
           <article
-            v-for="item in demoTimeline"
-            :key="item.title"
+            v-for="item in history"
+            v-else
+            :key="item.entryId"
             class="rounded-[1.5rem] border border-border/70 bg-background/70 p-5"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-lg font-semibold tracking-[-0.02em]">{{ item.title }}</p>
-                <p class="mt-2 text-sm leading-6 text-muted-foreground">{{ item.detail }}</p>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="space-y-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-lg font-semibold tracking-[-0.02em]">{{ item.title }}</h3>
+                  <Badge :variant="statusMeta(item.status).tone">
+                    {{ statusMeta(item.status).label }}
+                  </Badge>
+                </div>
+                <p class="text-sm leading-6 text-muted-foreground">
+                  {{ item.detail }}
+                </p>
+                <div class="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                  <p>记录时间：{{ formatTime(item.recordedAtMs) }}</p>
+                  <p>任务 ID：{{ item.taskId || '即时操作' }}</p>
+                </div>
               </div>
-              <Badge variant="secondary">{{ item.result }}</Badge>
+
+              <div class="flex items-center gap-2 rounded-full border border-border/70 px-3 py-2 text-sm text-muted-foreground">
+                <component :is="sourceIcon(item.origin)" class="size-4 text-primary" />
+                <span>来源：{{ sourceLabel(item.origin) }}</span>
+              </div>
             </div>
           </article>
+
+          <div
+            v-if="!loading && history.length === 0"
+            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+          >
+            还没有任何任务记录。
+          </div>
         </CardContent>
       </Card>
 
@@ -59,24 +171,24 @@ const demoTimeline = [
         <CardHeader class="gap-3">
           <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">记录说明</Badge>
           <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-            关键结果清晰可查。
+            记录来源和结果是拆开的
           </CardTitle>
           <CardDescription class="text-white/70">
-            每条记录都会保留状态与结果，方便你快速回看。
+            来源看“谁发起”，状态看“后来发生了什么”，避免把创建者和执行结果混在一起。
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 text-sm leading-6 text-white/74">
           <div class="flex items-start gap-3">
-            <History class="mt-0.5 size-4 text-white/80" />
-            <p>近期操作会按时间顺序展示。</p>
+            <Smartphone class="mt-0.5 size-4 text-white/80" />
+            <p>移动端发起的任务会记录到具体设备名，便于回溯是谁下发了这条控制。</p>
           </div>
           <div class="flex items-start gap-3">
-            <ShieldCheck class="mt-0.5 size-4 text-white/80" />
-            <p>需要确认的操作会保留最终结果状态。</p>
+            <LaptopMinimal class="mt-0.5 size-4 text-white/80" />
+            <p>PC 本机直接执行的即时操作也会进入记录，来源显示为 PC 本机。</p>
           </div>
           <div class="flex items-start gap-3">
-            <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-            <p>常用信息会优先展示，方便快速定位。</p>
+            <TriangleAlert class="mt-0.5 size-4 text-white/80" />
+            <p>执行失败会保留错误信息，后续排查不需要靠口头复现。</p>
           </div>
         </CardContent>
       </Card>

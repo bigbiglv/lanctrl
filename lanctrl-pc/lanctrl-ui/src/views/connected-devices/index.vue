@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpRight, Link2, RefreshCw, Smartphone, Unplug } from 'lucide-vue-next'
+import { Globe, RefreshCw, Smartphone, Unplug, WifiOff, Wifi } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -23,69 +23,44 @@ interface ClientInfo {
   is_connected: boolean
 }
 
+interface MdnsStatus {
+  enabled: boolean
+}
+
 const clients = ref<ClientInfo[]>([])
 const loading = ref(true)
-
-const mockClients: ClientInfo[] = [
-  {
-    client_id: 'mobile-alpha',
-    client_name: 'iPhone 16 Pro',
-    last_seen_at: Date.now() - 1000 * 60 * 6,
-    last_ip: '192.168.31.18',
-    is_online: true,
-    is_connected: true,
-  },
-  {
-    client_id: 'mobile-beta',
-    client_name: 'iPad mini',
-    last_seen_at: Date.now() - 1000 * 60 * 42,
-    last_ip: '192.168.31.29',
-    is_online: true,
-    is_connected: false,
-  },
-  {
-    client_id: 'mobile-gamma',
-    client_name: 'Android Phone',
-    last_seen_at: Date.now() - 1000 * 60 * 180,
-    last_ip: null,
-    is_online: false,
-    is_connected: false,
-  },
-]
+const mdnsEnabled = ref(true)
+const mdnsPending = ref(false)
 
 let unlistenConnected: UnlistenFn | null = null
 let unlistenDisconnected: UnlistenFn | null = null
+let unlistenClientsChanged: UnlistenFn | null = null
+let unlistenMdnsChanged: UnlistenFn | null = null
 
 const onlineCount = computed(() => clients.value.filter((client) => client.is_online).length)
 const connectedCount = computed(() => clients.value.filter((client) => client.is_connected).length)
+const sortedClients = computed(() =>
+  [...clients.value].sort((left, right) => {
+    if (left.is_connected !== right.is_connected)
+      return left.is_connected ? -1 : 1
+
+    if (left.is_online !== right.is_online)
+      return left.is_online ? -1 : 1
+
+    return left.client_name.localeCompare(right.client_name, 'zh-CN')
+  }),
+)
 
 async function fetchClients() {
   if (!isTauri()) {
-    loading.value = true
-    clients.value = mockClients
+    clients.value = []
     loading.value = false
     return
   }
 
   try {
     loading.value = true
-    const rawClients = await invoke<ClientInfo[]>('get_clients_with_status')
-
-    const checkPromises = rawClients.map(async (client) => {
-      let isOnline = false
-
-      if (client.last_ip) {
-        try {
-          isOnline = await invoke<boolean>('ping_mobile_device', { ip: client.last_ip })
-        } catch {
-          isOnline = false
-        }
-      }
-
-      return { ...client, is_online: isOnline }
-    })
-
-    clients.value = await Promise.all(checkPromises)
+    clients.value = await invoke<ClientInfo[]>('get_clients_with_status')
   } catch (error) {
     console.error('Failed to get paired clients:', error)
   } finally {
@@ -93,12 +68,39 @@ async function fetchClients() {
   }
 }
 
+async function fetchMdnsStatus() {
+  if (!isTauri())
+    return
+
+  try {
+    const status = await invoke<MdnsStatus>('get_mdns_status')
+    mdnsEnabled.value = status.enabled
+  } catch (error) {
+    console.error('Failed to get mdns status:', error)
+  }
+}
+
+async function toggleMdns() {
+  if (!isTauri() || mdnsPending.value)
+    return
+
+  try {
+    mdnsPending.value = true
+    const status = await invoke<MdnsStatus>('set_mdns_enabled', {
+      enabled: !mdnsEnabled.value,
+    })
+    mdnsEnabled.value = status.enabled
+  } catch (error) {
+    console.error('Failed to toggle mdns:', error)
+  } finally {
+    mdnsPending.value = false
+  }
+}
+
 async function forgetDevice(client: ClientInfo) {
   const confirmed = window.confirm(`确认移除“${client.client_name}”吗？`)
-
-  if (!confirmed) {
+  if (!confirmed)
     return
-  }
 
   if (!isTauri()) {
     clients.value = clients.value.filter((item) => item.client_id !== client.client_id)
@@ -106,10 +108,6 @@ async function forgetDevice(client: ClientInfo) {
   }
 
   try {
-    if (client.is_connected && client.last_ip) {
-      await invoke('notify_mobile_disconnect', { ip: client.last_ip }).catch(() => undefined)
-    }
-
     await invoke('remove_paired_client', { clientId: client.client_id })
     await fetchClients()
   } catch (error) {
@@ -118,9 +116,8 @@ async function forgetDevice(client: ClientInfo) {
 }
 
 function formatLastSeen(timestamp: number) {
-  if (!timestamp) {
+  if (!timestamp)
     return '暂无记录'
-  }
 
   return new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
@@ -131,39 +128,24 @@ function formatLastSeen(timestamp: number) {
 }
 
 onMounted(async () => {
-  await fetchClients()
+  await Promise.all([fetchClients(), fetchMdnsStatus()])
 
-  if (!isTauri()) {
+  if (!isTauri())
     return
-  }
 
-  unlistenConnected = await listen<{ client_id: string; client_name: string }>(
-    'device_connected',
-    (event) => {
-      const target = clients.value.find((client) => client.client_id === event.payload.client_id)
-
-      if (target) {
-        target.is_connected = true
-        target.is_online = true
-      }
-    },
-  )
-
-  unlistenDisconnected = await listen<{ client_id: string; client_name: string }>(
-    'device_disconnected',
-    (event) => {
-      const target = clients.value.find((client) => client.client_id === event.payload.client_id)
-
-      if (target) {
-        target.is_connected = false
-      }
-    },
-  )
+  unlistenConnected = await listen('device_connected', () => void fetchClients())
+  unlistenDisconnected = await listen('device_disconnected', () => void fetchClients())
+  unlistenClientsChanged = await listen('paired_clients_changed', () => void fetchClients())
+  unlistenMdnsChanged = await listen<MdnsStatus>('mdns_status_changed', (event) => {
+    mdnsEnabled.value = event.payload.enabled
+  })
 })
 
 onUnmounted(() => {
   unlistenConnected?.()
   unlistenDisconnected?.()
+  unlistenClientsChanged?.()
+  unlistenMdnsChanged?.()
 })
 </script>
 
@@ -174,17 +156,23 @@ onUnmounted(() => {
         <div class="max-w-3xl space-y-4">
           <Badge variant="outline" class="w-fit rounded-full">设备管理</Badge>
           <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
-            查看已配对设备、在线状态和当前连接情况。
+            查看受信移动端、当前 WebSocket 会话状态，以及局域网发现是否对外广播。
           </h2>
           <p class="text-base leading-7 text-muted-foreground">
-            你可以在这里快速确认哪些设备可用，并对不再需要的设备进行移除。
+            在线与连接状态现在优先由 WebSocket 会话驱动。mDNS 只负责让移动端发现这台 PC，不再承担实时状态同步。
           </p>
         </div>
 
-        <Button variant="outline" class="w-fit rounded-full" @click="fetchClients">
-          <RefreshCw class="size-4" />
-          刷新设备
-        </Button>
+        <div class="flex flex-wrap items-center gap-3">
+          <Button variant="outline" class="rounded-full" :disabled="mdnsPending" @click="toggleMdns">
+            <component :is="mdnsEnabled ? Wifi : WifiOff" class="size-4" />
+            {{ mdnsEnabled ? '关闭局域网发现' : '开启局域网发现' }}
+          </Button>
+          <Button variant="outline" class="rounded-full" @click="fetchClients">
+            <RefreshCw class="size-4" />
+            刷新设备
+          </Button>
+        </div>
       </div>
     </section>
 
@@ -198,10 +186,10 @@ onUnmounted(() => {
           </div>
           <div class="space-y-2">
             <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-              设备列表
+              受信设备列表
             </CardTitle>
             <CardDescription>
-              每张卡片展示设备名称、最近在线时间和连接状态。
+              已连接表示当前存在有效 WebSocket 控制会话；在线表示最近仍有有效会话或心跳。
             </CardDescription>
           </div>
         </CardHeader>
@@ -215,16 +203,14 @@ onUnmounted(() => {
           </div>
 
           <article
-            v-for="client in clients"
+            v-for="client in sortedClients"
             v-else
             :key="client.client_id"
             class="rounded-[1.75rem] border border-border/70 bg-background/70 p-5"
           >
             <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div class="flex items-start gap-4">
-                <div
-                  class="flex size-12 items-center justify-center rounded-full border border-border/70 bg-accent/60"
-                >
+                <div class="flex size-12 items-center justify-center rounded-full border border-border/70 bg-accent/60">
                   <Smartphone class="size-5 text-primary" />
                 </div>
 
@@ -278,22 +264,29 @@ onUnmounted(() => {
       <div class="flex flex-col gap-6">
         <Card class="apple-section apple-inverse border-0">
           <CardHeader class="gap-3">
-            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">状态说明</Badge>
+            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">发现状态</Badge>
             <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-              在线与连接状态会实时变化。
+              mDNS 广播现在可按需开关
             </CardTitle>
             <CardDescription class="text-white/70">
-              通过页面中的状态标签，快速了解设备当前是否可用。
+              这台 PC 即使收起到系统托盘，只要应用进程还活着且开关为开启，局域网发现就会持续广播。
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4 text-sm leading-6 text-white/74">
             <div class="flex items-start gap-3">
-              <Link2 class="mt-0.5 size-4 text-white/80" />
-              <p>在线表示设备当前可被访问。</p>
+              <Globe class="mt-0.5 size-4 text-white/80" />
+              <p>
+                当前状态：
+                <span class="font-medium text-white">{{ mdnsEnabled ? '已开启' : '已关闭' }}</span>
+              </p>
             </div>
             <div class="flex items-start gap-3">
-              <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-              <p>已连接表示该设备正在使用当前控制会话。</p>
+              <Wifi class="mt-0.5 size-4 text-white/80" />
+              <p>开启时移动端可以自动发现 PC；关闭后仍可使用已保存 IP 或手动配对。</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <WifiOff class="mt-0.5 size-4 text-white/80" />
+              <p>如果你只在少量固定设备间使用，关闭广播可以减少长期驻留时的无谓网络公告。</p>
             </div>
           </CardContent>
         </Card>

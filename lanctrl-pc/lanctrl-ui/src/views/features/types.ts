@@ -43,6 +43,7 @@ export interface FeatureSnapshot {
 export type FeatureCommand =
   | { feature: 'shutdown' }
   | { feature: 'restart' }
+  | { feature: 'test_notification' }
   | { feature: 'volume'; level: number }
 
 export interface FeatureExecutionResult {

@@ -1,83 +1,122 @@
 import 'dart:convert';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class StorageService {
+  StorageService(this._secureStorage, this._prefs);
+
+  static const _clientIdKey = 'client_id';
+  static const _knownDevicesKey = 'known_devices';
+  static const _activeDeviceIdKey = 'active_device_id';
+  static const _themeIdKey = 'theme_id';
+  static const _themeModeKey = 'theme_mode';
+
   final FlutterSecureStorage _secureStorage;
   final SharedPreferences _prefs;
-
-  StorageService(this._secureStorage, this._prefs);
 
   static Future<StorageService> init() async {
     const secureStorage = FlutterSecureStorage();
     final prefs = await SharedPreferences.getInstance();
-    
-    // Init Client ID for the first start
-    if (!prefs.containsKey('client_id')) {
-      await prefs.setString('client_id', const Uuid().v4());
+
+    if (!prefs.containsKey(_clientIdKey)) {
+      await prefs.setString(_clientIdKey, const Uuid().v4());
     }
 
     return StorageService(secureStorage, prefs);
   }
 
-  String get clientId => _prefs.getString('client_id')!;
+  String get clientId => _prefs.getString(_clientIdKey)!;
 
-  // Save device meta to SharedPreferences (omitting the sensitive Tokens)
-  Map<String, dynamic> getDevice(String deviceId) {
-    var str = _prefs.getString('device_$deviceId');
-    if (str != null) return jsonDecode(str);
-    return {};
+  String? get activeDeviceId => _prefs.getString(_activeDeviceIdKey);
+
+  Future<void> setActiveDeviceId(String? deviceId) {
+    if (deviceId == null || deviceId.isEmpty) {
+      return _prefs.remove(_activeDeviceIdKey);
+    }
+    return _prefs.setString(_activeDeviceIdKey, deviceId);
   }
-  
-  Future<void> saveDevice(String deviceId, String name, String ip, int port) async {
-    final dev = {
+
+  String get themeId => _prefs.getString(_themeIdKey) ?? 'default';
+
+  Future<void> setThemeId(String themeId) {
+    return _prefs.setString(_themeIdKey, themeId);
+  }
+
+  String get themeMode => _prefs.getString(_themeModeKey) ?? 'light';
+
+  Future<void> setThemeMode(String themeMode) {
+    return _prefs.setString(_themeModeKey, themeMode);
+  }
+
+  Map<String, dynamic> getDevice(String deviceId) {
+    final raw = _prefs.getString('device_$deviceId');
+    if (raw == null) {
+      return {};
+    }
+
+    return jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  Future<void> saveDevice(
+    String deviceId,
+    String name,
+    String ip,
+    int port,
+  ) async {
+    final device = <String, dynamic>{
       'deviceId': deviceId,
       'name': name,
       'ip': ip,
       'port': port,
-      'last_seen': DateTime.now().millisecondsSinceEpoch,
+      'lastSeenAt': DateTime.now().millisecondsSinceEpoch,
     };
-    await _prefs.setString('device_$deviceId', jsonEncode(dev));
-    
-    List<String> devices = _prefs.getStringList('known_devices') ?? [];
+
+    await _prefs.setString('device_$deviceId', jsonEncode(device));
+
+    final devices = List<String>.from(
+      _prefs.getStringList(_knownDevicesKey) ?? const <String>[],
+    );
     if (!devices.contains(deviceId)) {
       devices.add(deviceId);
-      await _prefs.setStringList('known_devices', devices);
+      await _prefs.setStringList(_knownDevicesKey, devices);
     }
   }
 
   Future<void> removeDevice(String deviceId) async {
     await _prefs.remove('device_$deviceId');
     await _secureStorage.delete(key: 'token_$deviceId');
-    
-    List<String> devices = _prefs.getStringList('known_devices') ?? [];
-    devices.remove(deviceId);
-    await _prefs.setStringList('known_devices', devices);
-  }
-  
-  List<Map<String, dynamic>> getAllKnownDevices() {
-    List<String> devices = _prefs.getStringList('known_devices') ?? [];
-    List<Map<String, dynamic>> result = [];
-    for (var id in devices) {
-      var d = getDevice(id);
-      if (d.isNotEmpty) result.add(d);
+
+    final devices = List<String>.from(
+      _prefs.getStringList(_knownDevicesKey) ?? const <String>[],
+    )..remove(deviceId);
+
+    await _prefs.setStringList(_knownDevicesKey, devices);
+
+    if (activeDeviceId == deviceId) {
+      await setActiveDeviceId(null);
     }
-    return result;
   }
 
-  // Token is saved strictly in SecureStorage
-  Future<void> saveToken(String deviceId, String token) async {
-    await _secureStorage.write(key: 'token_$deviceId', value: token);
+  List<Map<String, dynamic>> getAllKnownDevices() {
+    final devices = _prefs.getStringList(_knownDevicesKey) ?? const <String>[];
+    return devices
+        .map(getDevice)
+        .where((device) => device.isNotEmpty)
+        .toList(growable: false);
   }
 
-  Future<String?> getToken(String deviceId) async {
-    return await _secureStorage.read(key: 'token_$deviceId');
+  Future<void> saveToken(String deviceId, String token) {
+    return _secureStorage.write(key: 'token_$deviceId', value: token);
+  }
+
+  Future<String?> getToken(String deviceId) {
+    return _secureStorage.read(key: 'token_$deviceId');
   }
 }
 
-// Provider injected later via ProviderScope overrides in main.dart
 final storageServiceProvider = Provider<StorageService>((ref) {
-  throw UnimplementedError('Storage provider must be initialized.');
+  throw UnimplementedError('StorageService must be overridden in main().');
 });

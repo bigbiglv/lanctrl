@@ -1,30 +1,52 @@
 use axum::{
-    extract::{ConnectInfo, State},
-    routing::post,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        ConnectInfo, Query, State,
+    },
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
     Json, Router,
 };
+use futures_util::{SinkExt, StreamExt};
+use lanctrl_scheduler::{ScheduledTask, TaskOrigin};
 use lanctrl_service::{
-    execute_feature_command, get_feature_groups, get_feature_snapshot, FeatureCommand,
-    FeatureExecutionResult, FeatureGroup, FeatureSnapshot,
+    get_feature_groups, get_feature_snapshot, FeatureCommand, FeatureExecutionResult, FeatureGroup,
+    FeatureSnapshot,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap as StdHashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap as StdHashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use tauri::AppHandle;
-use tauri::Emitter;
-use tokio::sync::oneshot;
+use tauri::{AppHandle, Emitter};
+use tokio::sync::{mpsc, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
-use crate::store::{PairedClient, GLOBAL_STORE};
+use crate::{
+    features::execute_feature_command_with_origin,
+    scheduler,
+    store::{PairedClient, GLOBAL_STORE},
+};
 
 lazy_static! {
-    pub static ref PENDING_REQUESTS: Arc<Mutex<StdHashMap<String, oneshot::Sender<bool>>>> = Arc::new(Mutex::new(StdHashMap::new()));
-    /// 内存态：当前有效连接 (client_id 集合)，不需要持久化
-    pub static ref ACTIVE_CONNECTIONS: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+    pub static ref PENDING_REQUESTS: Arc<Mutex<StdHashMap<String, oneshot::Sender<bool>>>> =
+        Arc::new(Mutex::new(StdHashMap::new()));
+    pub static ref ONLINE_CLIENTS: Arc<Mutex<HashSet<String>>> =
+        Arc::new(Mutex::new(HashSet::new()));
+    pub static ref ACTIVE_CONNECTIONS: Arc<Mutex<HashSet<String>>> =
+        Arc::new(Mutex::new(HashSet::new()));
+    pub static ref LAST_HEARTBEATS: Arc<Mutex<StdHashMap<String, u64>>> =
+        Arc::new(Mutex::new(StdHashMap::new()));
+    static ref WS_CONNECTIONS: Arc<Mutex<StdHashMap<String, WsConnectionHandle>>> =
+        Arc::new(Mutex::new(StdHashMap::new()));
+}
+
+#[derive(Clone)]
+struct WsConnectionHandle {
+    connection_id: String,
+    sender: mpsc::UnboundedSender<WsServerEvent>,
 }
 
 #[derive(Clone)]
@@ -32,37 +54,12 @@ pub struct AppState {
     pub tauri_app: AppHandle,
 }
 
-pub async fn start_server(port: u16, tauri_app: AppHandle) {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
-    let state = AppState { tauri_app };
-
-    let app = Router::new()
-        .route("/auth/pair", post(auth_pair))
-        .route("/auth/verify", post(auth_verify))
-        .route("/auth/connect", post(auth_connect))
-        .route("/auth/disconnect", post(auth_disconnect))
-        .route("/features/catalog", post(features_catalog))
-        .route("/features/execute", post(features_execute))
-        .layer(cors)
-        .with_state(state)
-        .into_make_service_with_connect_info::<SocketAddr>();
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    log::info!("Axum server listening on {}", addr);
-
-    if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-        tokio::spawn(async move {
-            if let Err(e) = axum::serve(listener, app).await {
-                log::error!("Axum server error: {}", e);
-            }
-        });
-    } else {
-        log::error!("Failed to bind Axum to port {}", port);
-    }
+#[derive(Clone)]
+struct StoredClientSnapshot {
+    client_id: String,
+    client_name: String,
+    last_seen_at: u64,
+    last_ip: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -80,79 +77,11 @@ pub struct PairResponse {
     pub device_name: Option<String>,
 }
 
-async fn auth_pair(
-    State(state): State<AppState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Json(payload): Json<PairRequestInfo>,
-) -> Json<PairResponse> {
-    let (tx, rx) = oneshot::channel();
-
-    {
-        let mut map = PENDING_REQUESTS.lock().unwrap();
-        map.insert(payload.client_id.clone(), tx);
-    }
-
-    if let Err(e) = state.tauri_app.emit("pair_request", payload.clone()) {
-        log::error!("Failed to emit event: {}", e);
-        return Json(PairResponse {
-            success: false,
-            token: None,
-            msg: "Internal server error".into(),
-            device_id: None,
-            device_name: None,
-        });
-    }
-
-    match rx.await {
-        Ok(allowed) => {
-            if allowed {
-                let token = Uuid::new_v4().to_string();
-
-                let client = PairedClient {
-                    client_id: payload.client_id,
-                    client_name: payload.client_name,
-                    token_hash: token.clone(),
-                    last_seen_at: 0,
-                    last_ip: Some(addr.ip().to_string()),
-                };
-
-                let (my_device_id, my_device_name) = {
-                    let mut s = GLOBAL_STORE.lock().unwrap();
-                    s.add_paired_client(client);
-                    (s.data.device_id.clone(), s.data.device_name.clone())
-                };
-
-                Json(PairResponse {
-                    success: true,
-                    token: Some(token),
-                    msg: "Pairing successful".into(),
-                    device_id: Some(my_device_id),
-                    device_name: Some(my_device_name),
-                })
-            } else {
-                Json(PairResponse {
-                    success: false,
-                    token: None,
-                    msg: "Pairing was denied by PC user".into(),
-                    device_id: None,
-                    device_name: None,
-                })
-            }
-        }
-        Err(_) => Json(PairResponse {
-            success: false,
-            token: None,
-            msg: "Pairing request timed out or cancelled".into(),
-            device_id: None,
-            device_name: None,
-        }),
-    }
-}
-
 #[derive(Deserialize)]
 pub struct VerifyRequest {
     pub client_id: String,
     pub token: String,
+    pub client_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -161,49 +90,11 @@ pub struct VerifyResponse {
     pub msg: String,
 }
 
-fn is_client_authorized(client_id: &str, token: &str) -> bool {
-    let store = GLOBAL_STORE.lock().unwrap();
-    store.is_client_paired(client_id, token)
-}
-
-async fn auth_verify(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Json(payload): Json<VerifyRequest>,
-) -> Json<VerifyResponse> {
-    let is_valid;
-    {
-        let mut store = GLOBAL_STORE.lock().unwrap();
-        is_valid = store.is_client_paired(&payload.client_id, &payload.token);
-        if is_valid {
-            if let Some(client) = store
-                .data
-                .paired_clients
-                .values_mut()
-                .find(|c| c.client_id == payload.client_id)
-            {
-                client.last_ip = Some(addr.ip().to_string());
-            }
-            let _ = store.save();
-        }
-    }
-
-    Json(VerifyResponse {
-        success: is_valid,
-        msg: if is_valid {
-            "Verified"
-        } else {
-            "Invalid or missing token"
-        }
-        .into(),
-    })
-}
-
-// ─── 连接/断开通知 ────────────────────────────────────────────────
-
 #[derive(Deserialize)]
 pub struct SessionRequest {
     pub client_id: String,
     pub token: String,
+    pub client_name: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -212,38 +103,34 @@ pub struct SessionEvent {
     pub client_name: String,
 }
 
-async fn auth_connect(
-    State(state): State<AppState>,
-    Json(payload): Json<SessionRequest>,
-) -> Json<serde_json::Value> {
-    let store = GLOBAL_STORE.lock().unwrap();
-    if !store.is_client_paired(&payload.client_id, &payload.token) {
-        return Json(serde_json::json!({ "success": false, "msg": "Unauthorized" }));
-    }
-    let client_name = store
-        .data
-        .paired_clients
-        .values()
-        .find(|c| c.client_id == payload.client_id)
-        .map(|c| c.client_name.clone())
-        .unwrap_or_default();
-    drop(store);
+#[derive(Deserialize)]
+struct WsSessionQuery {
+    client_id: String,
+    token: String,
+    client_name: Option<String>,
+}
 
-    ACTIVE_CONNECTIONS
-        .lock()
-        .unwrap()
-        .insert(payload.client_id.clone());
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum WsServerEvent {
+    SessionReady {
+        client_id: String,
+        client_name: String,
+    },
+    TasksSync {
+        tasks: Vec<ScheduledTask>,
+    },
+    Disconnect {
+        reason: String,
+    },
+}
 
-    // 发送 Tauri 事件通知 Vue 前端
-    let _ = state.tauri_app.emit(
-        "device_connected",
-        SessionEvent {
-            client_id: payload.client_id,
-            client_name,
-        },
-    );
-
-    Json(serde_json::json!({ "success": true }))
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum WsClientEvent {
+    Heartbeat,
+    RequestTasksSync,
+    Disconnect,
 }
 
 #[derive(Deserialize)]
@@ -277,6 +164,602 @@ pub struct FeatureExecuteResponse {
     pub result: Option<FeatureExecutionResult>,
 }
 
+#[derive(Deserialize)]
+pub struct MobileTaskListRequest {
+    pub client_id: String,
+    pub token: String,
+}
+
+#[derive(Deserialize)]
+pub struct MobileTaskCreateRequest {
+    pub client_id: String,
+    pub token: String,
+    pub execute_at_ms: u64,
+    #[serde(flatten)]
+    pub command: FeatureCommand,
+}
+
+#[derive(Deserialize)]
+pub struct MobileTaskCancelRequest {
+    pub client_id: String,
+    pub token: String,
+    pub task_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListResponse {
+    pub success: bool,
+    pub msg: String,
+    pub tasks: Vec<ScheduledTask>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskCreateResponse {
+    pub success: bool,
+    pub msg: String,
+    pub task: Option<ScheduledTask>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ClientInfo {
+    pub client_id: String,
+    pub client_name: String,
+    pub last_seen_at: u64,
+    pub last_ip: Option<String>,
+    pub is_online: bool,
+    pub is_connected: bool,
+}
+
+pub async fn start_server(port: u16, tauri_app: AppHandle) {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let state = AppState { tauri_app };
+
+    let app = Router::new()
+        .route("/auth/pair", post(auth_pair))
+        .route("/auth/verify", post(auth_verify))
+        .route("/auth/connect", post(auth_connect))
+        .route("/auth/disconnect", post(auth_disconnect))
+        .route("/auth/heartbeat", post(auth_heartbeat))
+        .route("/ws/session", get(ws_session))
+        .route("/features/catalog", post(features_catalog))
+        .route("/features/execute", post(features_execute))
+        .route("/tasks/list", post(tasks_list))
+        .route("/tasks/create", post(tasks_create))
+        .route("/tasks/cancel", post(tasks_cancel))
+        .layer(cors)
+        .with_state(state)
+        .into_make_service_with_connect_info::<SocketAddr>();
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    log::info!("Axum server listening on {}", addr);
+
+    match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => {
+            tokio::spawn(async move {
+                if let Err(error) = axum::serve(listener, app).await {
+                    log::error!("Axum server error: {}", error);
+                }
+            });
+        }
+        Err(error) => {
+            log::error!("Failed to bind Axum to port {}: {}", port, error);
+        }
+    }
+}
+
+fn current_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+fn emit_clients_changed(app: &AppHandle) {
+    let _ = app.emit("paired_clients_changed", serde_json::json!({}));
+}
+
+fn emit_session_event(app: &AppHandle, event_name: &str, event: &SessionEvent) {
+    let _ = app.emit(event_name, event.clone());
+}
+
+fn get_client_name(client_id: &str) -> String {
+    let store = GLOBAL_STORE.lock().unwrap();
+    store
+        .data
+        .paired_clients
+        .get(client_id)
+        .map(|client| client.client_name.clone())
+        .unwrap_or_else(|| "未知设备".to_string())
+}
+
+fn sync_client_state(
+    client_id: &str,
+    token: &str,
+    ip: Option<&str>,
+    client_name: Option<&str>,
+) -> Option<String> {
+    let mut store = GLOBAL_STORE.lock().unwrap();
+    let client = store.data.paired_clients.get_mut(client_id)?;
+    if client.token_hash != token {
+        return None;
+    }
+
+    if let Some(next_name) = client_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != client.client_name)
+    {
+        client.client_name = next_name.to_string();
+    }
+
+    if let Some(next_ip) = ip.filter(|value| !value.is_empty()) {
+        client.last_ip = Some(next_ip.to_string());
+    }
+
+    client.last_seen_at = current_timestamp_ms();
+    let client_name = client.client_name.clone();
+    let _ = store.save();
+    Some(client_name)
+}
+
+fn collect_client_snapshots() -> Vec<StoredClientSnapshot> {
+    let store = GLOBAL_STORE.lock().unwrap();
+    store
+        .data
+        .paired_clients
+        .values()
+        .map(|client| StoredClientSnapshot {
+            client_id: client.client_id.clone(),
+            client_name: client.client_name.clone(),
+            last_seen_at: client.last_seen_at,
+            last_ip: client.last_ip.clone(),
+        })
+        .collect()
+}
+
+fn is_client_authorized(client_id: &str, token: &str) -> bool {
+    let store = GLOBAL_STORE.lock().unwrap();
+    store.is_client_paired(client_id, token)
+}
+
+fn mark_client_online(app: &AppHandle, client_id: &str) -> bool {
+    let now = current_timestamp_ms();
+    let became_online = {
+        let mut online_clients = ONLINE_CLIENTS.lock().unwrap();
+        online_clients.insert(client_id.to_string())
+    };
+
+    {
+        let mut heartbeats = LAST_HEARTBEATS.lock().unwrap();
+        heartbeats.insert(client_id.to_string(), now);
+    }
+
+    if became_online {
+        emit_clients_changed(app);
+    }
+
+    became_online
+}
+
+fn mark_client_connected(app: &AppHandle, client_id: &str, client_name: String) -> bool {
+    let became_connected = {
+        let mut active_connections = ACTIVE_CONNECTIONS.lock().unwrap();
+        active_connections.insert(client_id.to_string())
+    };
+
+    if became_connected {
+        let event = SessionEvent {
+            client_id: client_id.to_string(),
+            client_name,
+        };
+        emit_session_event(app, "device_connected", &event);
+        emit_clients_changed(app);
+    }
+
+    became_connected
+}
+
+fn mark_client_offline(app: &AppHandle, client_id: &str) -> bool {
+    let was_online = {
+        let mut online_clients = ONLINE_CLIENTS.lock().unwrap();
+        online_clients.remove(client_id)
+    };
+
+    {
+        let mut heartbeats = LAST_HEARTBEATS.lock().unwrap();
+        heartbeats.remove(client_id);
+    }
+
+    let was_connected = {
+        let mut active_connections = ACTIVE_CONNECTIONS.lock().unwrap();
+        active_connections.remove(client_id)
+    };
+
+    if was_connected {
+        let event = SessionEvent {
+            client_id: client_id.to_string(),
+            client_name: get_client_name(client_id),
+        };
+        emit_session_event(app, "device_disconnected", &event);
+    }
+
+    if was_online || was_connected {
+        emit_clients_changed(app);
+    }
+
+    was_online || was_connected
+}
+
+fn remove_ws_connection(client_id: &str, connection_id: &str) {
+    let mut connections = WS_CONNECTIONS.lock().unwrap();
+    if matches!(
+        connections.get(client_id),
+        Some(handle) if handle.connection_id == connection_id
+    ) {
+        connections.remove(client_id);
+    }
+}
+
+pub fn cleanup_stale_presence(app: &AppHandle, timeout_ms: u64) {
+    let now = current_timestamp_ms();
+    let stale_client_ids = {
+        let heartbeats = LAST_HEARTBEATS.lock().unwrap();
+        heartbeats
+            .iter()
+            .filter_map(|(client_id, last_seen_at)| {
+                if now.saturating_sub(*last_seen_at) > timeout_ms {
+                    Some(client_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for client_id in stale_client_ids {
+        let _ = mark_client_offline(app, &client_id);
+    }
+}
+
+async fn ping_ip_address(ip: &str) -> bool {
+    let url = format!("http://{}:3001/ping", ip);
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(800))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+
+    match client.get(&url).send().await {
+        Ok(response) => response.status().is_success(),
+        Err(_) => false,
+    }
+}
+
+async fn auth_pair(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<PairRequestInfo>,
+) -> Json<PairResponse> {
+    let (tx, rx) = oneshot::channel();
+
+    {
+        let mut pending_requests = PENDING_REQUESTS.lock().unwrap();
+        pending_requests.insert(payload.client_id.clone(), tx);
+    }
+
+    if let Err(error) = state.tauri_app.emit("pair_request", payload.clone()) {
+        log::error!("Failed to emit pair request: {}", error);
+        let mut pending_requests = PENDING_REQUESTS.lock().unwrap();
+        pending_requests.remove(&payload.client_id);
+
+        return Json(PairResponse {
+            success: false,
+            token: None,
+            msg: "Internal server error".into(),
+            device_id: None,
+            device_name: None,
+        });
+    }
+
+    match rx.await {
+        Ok(true) => {
+            let token = Uuid::new_v4().to_string();
+            let client = PairedClient {
+                client_id: payload.client_id,
+                client_name: payload.client_name,
+                token_hash: token.clone(),
+                last_seen_at: current_timestamp_ms(),
+                last_ip: Some(addr.ip().to_string()),
+            };
+
+            let (device_id, device_name) = {
+                let mut store = GLOBAL_STORE.lock().unwrap();
+                store.add_paired_client(client);
+                (store.data.device_id.clone(), store.data.device_name.clone())
+            };
+
+            emit_clients_changed(&state.tauri_app);
+
+            Json(PairResponse {
+                success: true,
+                token: Some(token),
+                msg: "Pairing successful".into(),
+                device_id: Some(device_id),
+                device_name: Some(device_name),
+            })
+        }
+        Ok(false) => Json(PairResponse {
+            success: false,
+            token: None,
+            msg: "Pairing was denied by PC user".into(),
+            device_id: None,
+            device_name: None,
+        }),
+        Err(_) => Json(PairResponse {
+            success: false,
+            token: None,
+            msg: "Pairing request timed out or cancelled".into(),
+            device_id: None,
+            device_name: None,
+        }),
+    }
+}
+
+async fn auth_verify(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<VerifyRequest>,
+) -> Json<VerifyResponse> {
+    let client_name = sync_client_state(
+        &payload.client_id,
+        &payload.token,
+        Some(&addr.ip().to_string()),
+        payload.client_name.as_deref(),
+    );
+
+    if let Some(client_name) = client_name {
+        let _ = mark_client_online(&state.tauri_app, &payload.client_id);
+        log::debug!("Verified client {} ({})", client_name, payload.client_id);
+        return Json(VerifyResponse {
+            success: true,
+            msg: "Verified".into(),
+        });
+    }
+
+    Json(VerifyResponse {
+        success: false,
+        msg: "Invalid or missing token".into(),
+    })
+}
+
+async fn ws_session(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Query(query): Query<WsSessionQuery>,
+) -> impl IntoResponse {
+    let client_name = match sync_client_state(
+        &query.client_id,
+        &query.token,
+        Some(&addr.ip().to_string()),
+        query.client_name.as_deref(),
+    ) {
+        Some(client_name) => client_name,
+        None => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    ws.on_upgrade(move |socket| {
+        handle_ws_session(
+            state.tauri_app,
+            socket,
+            query.client_id,
+            client_name,
+            query.token,
+            addr.ip().to_string(),
+        )
+    })
+}
+
+async fn handle_ws_session(
+    app: AppHandle,
+    socket: WebSocket,
+    client_id: String,
+    client_name: String,
+    token: String,
+    ip: String,
+) {
+    let connection_id = Uuid::new_v4().to_string();
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<WsServerEvent>();
+
+    let previous = {
+        let mut connections = WS_CONNECTIONS.lock().unwrap();
+        connections.insert(
+            client_id.clone(),
+            WsConnectionHandle {
+                connection_id: connection_id.clone(),
+                sender: out_tx.clone(),
+            },
+        )
+    };
+
+    if let Some(previous) = previous {
+        let _ = previous.sender.send(WsServerEvent::Disconnect {
+            reason: "新的会话已接管当前连接".into(),
+        });
+    }
+
+    let _ = mark_client_online(&app, &client_id);
+    let _ = mark_client_connected(&app, &client_id, client_name.clone());
+
+    let _ = out_tx.send(WsServerEvent::SessionReady {
+        client_id: client_id.clone(),
+        client_name: client_name.clone(),
+    });
+    let _ = out_tx.send(WsServerEvent::TasksSync {
+        tasks: scheduler::list_tasks(),
+    });
+
+    let writer = tokio::spawn(async move {
+        while let Some(event) = out_rx.recv().await {
+            let payload = match serde_json::to_string(&event) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    log::error!("Failed to serialize ws event: {}", error);
+                    continue;
+                }
+            };
+
+            if ws_sender.send(Message::Text(payload.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    while let Some(message) = ws_receiver.next().await {
+        let Ok(message) = message else {
+            break;
+        };
+
+        match message {
+            Message::Text(text) => {
+                let Ok(event) = serde_json::from_str::<WsClientEvent>(&text) else {
+                    continue;
+                };
+
+                match event {
+                    WsClientEvent::Heartbeat => {
+                        let _ =
+                            sync_client_state(&client_id, &token, Some(&ip), Some(&client_name));
+                        let _ = mark_client_online(&app, &client_id);
+                    }
+                    WsClientEvent::RequestTasksSync => {
+                        let _ = out_tx.send(WsServerEvent::TasksSync {
+                            tasks: scheduler::list_tasks(),
+                        });
+                    }
+                    WsClientEvent::Disconnect => break,
+                }
+            }
+            Message::Ping(_) | Message::Pong(_) => {
+                let _ = mark_client_online(&app, &client_id);
+            }
+            Message::Close(_) => break,
+            Message::Binary(_) => {}
+        }
+    }
+
+    writer.abort();
+    remove_ws_connection(&client_id, &connection_id);
+    let _ = mark_client_offline(&app, &client_id);
+}
+
+pub fn broadcast_tasks_sync() {
+    let tasks = scheduler::list_tasks();
+    let senders = {
+        let connections = WS_CONNECTIONS.lock().unwrap();
+        connections
+            .values()
+            .map(|handle| handle.sender.clone())
+            .collect::<Vec<_>>()
+    };
+
+    for sender in senders {
+        let _ = sender.send(WsServerEvent::TasksSync {
+            tasks: tasks.clone(),
+        });
+    }
+}
+
+pub fn disconnect_client_session(client_id: &str, reason: &str) {
+    let sender = {
+        let connections = WS_CONNECTIONS.lock().unwrap();
+        connections
+            .get(client_id)
+            .map(|handle| handle.sender.clone())
+    };
+
+    if let Some(sender) = sender {
+        let _ = sender.send(WsServerEvent::Disconnect {
+            reason: reason.to_string(),
+        });
+    }
+}
+
+async fn auth_connect(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<SessionRequest>,
+) -> Json<serde_json::Value> {
+    match sync_client_state(
+        &payload.client_id,
+        &payload.token,
+        Some(&addr.ip().to_string()),
+        payload.client_name.as_deref(),
+    ) {
+        Some(_) => {
+            let _ = mark_client_online(&state.tauri_app, &payload.client_id);
+            Json(serde_json::json!({ "success": true }))
+        }
+        None => Json(serde_json::json!({ "success": false, "msg": "Unauthorized" })),
+    }
+}
+
+async fn auth_disconnect(
+    State(state): State<AppState>,
+    Json(payload): Json<SessionRequest>,
+) -> Json<serde_json::Value> {
+    let authorized = sync_client_state(
+        &payload.client_id,
+        &payload.token,
+        None,
+        payload.client_name.as_deref(),
+    )
+    .is_some();
+
+    if !authorized {
+        return Json(serde_json::json!({ "success": false, "msg": "Unauthorized" }));
+    }
+
+    disconnect_client_session(&payload.client_id, "移动端主动断开");
+    let _ = mark_client_offline(&state.tauri_app, &payload.client_id);
+    Json(serde_json::json!({ "success": true }))
+}
+
+async fn auth_heartbeat(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<SessionRequest>,
+) -> Json<serde_json::Value> {
+    let client_name = match sync_client_state(
+        &payload.client_id,
+        &payload.token,
+        Some(&addr.ip().to_string()),
+        payload.client_name.as_deref(),
+    ) {
+        Some(client_name) => client_name,
+        None => {
+            return Json(serde_json::json!({ "success": false, "msg": "Unauthorized" }));
+        }
+    };
+
+    let _ = mark_client_online(&state.tauri_app, &payload.client_id);
+    log::debug!(
+        "Heartbeat received from {} ({})",
+        client_name,
+        payload.client_id
+    );
+
+    Json(serde_json::json!({ "success": true }))
+}
+
 async fn features_catalog(
     Json(payload): Json<MobileFeatureCatalogRequest>,
 ) -> Json<FeatureCatalogResponse> {
@@ -306,6 +789,7 @@ async fn features_catalog(
 }
 
 async fn features_execute(
+    State(state): State<AppState>,
     Json(payload): Json<MobileFeatureExecuteRequest>,
 ) -> Json<FeatureExecuteResponse> {
     if !is_client_authorized(&payload.client_id, &payload.token) {
@@ -316,7 +800,12 @@ async fn features_execute(
         });
     }
 
-    match execute_feature_command(payload.command) {
+    let origin = TaskOrigin::mobile(
+        payload.client_id.clone(),
+        get_client_name(&payload.client_id),
+    );
+
+    match execute_feature_command_with_origin(&state.tauri_app, payload.command, origin, None) {
         Ok(result) => Json(FeatureExecuteResponse {
             success: true,
             msg: result.message.clone(),
@@ -330,89 +819,121 @@ async fn features_execute(
     }
 }
 
-async fn auth_disconnect(
-    State(state): State<AppState>,
-    Json(payload): Json<SessionRequest>,
-) -> Json<serde_json::Value> {
-    let store = GLOBAL_STORE.lock().unwrap();
-    // 即使 Token 失效也允许断开（防止误删后残留状态）
-    let client_name = store
-        .data
-        .paired_clients
-        .values()
-        .find(|c| c.client_id == payload.client_id)
-        .map(|c| c.client_name.clone())
-        .unwrap_or_else(|| "未知设备".to_string());
-    drop(store);
+async fn tasks_list(Json(payload): Json<MobileTaskListRequest>) -> Json<TaskListResponse> {
+    if !is_client_authorized(&payload.client_id, &payload.token) {
+        return Json(TaskListResponse {
+            success: false,
+            msg: "Unauthorized".into(),
+            tasks: vec![],
+        });
+    }
 
-    ACTIVE_CONNECTIONS
-        .lock()
-        .unwrap()
-        .remove(&payload.client_id);
-
-    let _ = state.tauri_app.emit(
-        "device_disconnected",
-        SessionEvent {
-            client_id: payload.client_id,
-            client_name,
-        },
-    );
-
-    Json(serde_json::json!({ "success": true }))
+    Json(TaskListResponse {
+        success: true,
+        msg: "OK".into(),
+        tasks: scheduler::list_tasks(),
+    })
 }
 
-// ─── Tauri Commands ───────────────────────────────────────────────
+async fn tasks_create(
+    State(state): State<AppState>,
+    Json(payload): Json<MobileTaskCreateRequest>,
+) -> Json<TaskCreateResponse> {
+    if !is_client_authorized(&payload.client_id, &payload.token) {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "Unauthorized".into(),
+            task: None,
+        });
+    }
 
-#[derive(Serialize, Clone)]
-pub struct ClientInfo {
-    pub client_id: String,
-    pub client_name: String,
-    pub last_seen_at: u64,
-    pub last_ip: Option<String>,
-    pub is_connected: bool, // 内存态，基于 ACTIVE_CONNECTIONS
+    if payload.execute_at_ms <= current_timestamp_ms() {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "执行时间必须晚于当前时间".into(),
+            task: None,
+        });
+    }
+
+    let task = ScheduledTask::new(
+        payload.command,
+        payload.execute_at_ms,
+        TaskOrigin::mobile(
+            payload.client_id.clone(),
+            get_client_name(&payload.client_id),
+        ),
+    );
+    let created_task = scheduler::create_task(&state.tauri_app, task);
+
+    Json(TaskCreateResponse {
+        success: true,
+        msg: "定时任务已创建".into(),
+        task: Some(created_task),
+    })
+}
+
+async fn tasks_cancel(
+    State(state): State<AppState>,
+    Json(payload): Json<MobileTaskCancelRequest>,
+) -> Json<TaskCreateResponse> {
+    if !is_client_authorized(&payload.client_id, &payload.token) {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "Unauthorized".into(),
+            task: None,
+        });
+    }
+
+    let cancelled_task = scheduler::cancel_task(&state.tauri_app, &payload.task_id);
+    match cancelled_task {
+        Some(task) => Json(TaskCreateResponse {
+            success: true,
+            msg: "定时任务已停止".into(),
+            task: Some(task),
+        }),
+        None => Json(TaskCreateResponse {
+            success: false,
+            msg: "未找到可停止的定时任务".into(),
+            task: None,
+        }),
+    }
 }
 
 #[tauri::command]
 pub fn get_clients_with_status() -> Vec<ClientInfo> {
-    let store = GLOBAL_STORE.lock().unwrap();
-    let active = ACTIVE_CONNECTIONS.lock().unwrap();
-    store
-        .data
-        .paired_clients
-        .values()
-        .map(|c| ClientInfo {
-            client_id: c.client_id.clone(),
-            client_name: c.client_name.clone(),
-            last_seen_at: c.last_seen_at,
-            last_ip: c.last_ip.clone(),
-            is_connected: active.contains(&c.client_id),
+    let snapshots = collect_client_snapshots();
+    let online_clients = ONLINE_CLIENTS.lock().unwrap();
+    let active_connections = ACTIVE_CONNECTIONS.lock().unwrap();
+
+    snapshots
+        .into_iter()
+        .map(|snapshot| {
+            let is_online = online_clients.contains(&snapshot.client_id);
+            ClientInfo {
+                client_id: snapshot.client_id.clone(),
+                client_name: snapshot.client_name,
+                last_seen_at: snapshot.last_seen_at,
+                last_ip: snapshot.last_ip,
+                is_online,
+                is_connected: is_online && active_connections.contains(&snapshot.client_id),
+            }
         })
         .collect()
 }
 
 #[tauri::command]
 pub async fn ping_mobile_device(ip: String) -> Result<bool, String> {
-    let url = format!("http://{}:3001/ping", ip);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(800))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    match client.get(&url).send().await {
-        Ok(res) => Ok(res.status().is_success()),
-        Err(_) => Ok(false),
-    }
+    Ok(ping_ip_address(&ip).await)
 }
 
-/// 当 PC 端忘记/移除设备时，主动通知移动端断开
 #[tauri::command]
 pub async fn notify_mobile_disconnect(ip: String) -> Result<(), String> {
     let url = format!("http://{}:3001/disconnect", ip);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(1000))
         .build()
-        .map_err(|e| e.to_string())?;
-    // 发出即走，不关心返回值
+        .map_err(|error| error.to_string())?;
+
     let _ = client.post(&url).send().await;
     Ok(())
 }
