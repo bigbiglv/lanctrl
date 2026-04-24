@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ArrowUpRight, Power, SlidersHorizontal, Sparkles } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { Badge } from '../../components/ui/badge/index'

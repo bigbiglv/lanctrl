@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Globe, RefreshCw, Smartphone, Unplug, WifiOff, Wifi } from 'lucide-vue-next'
+import { RefreshCw, Smartphone, Unplug, WifiOff, Wifi } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Cpu, ExternalLink, Power, RadioTower, Sparkles, Volume2 } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -22,34 +21,6 @@ const mockDevices: PeripheralDevice[] = [
   { id: 'usb-01', classType: 'usb', name: 'USB-C Dock', status: 'warning' },
   { id: 'audio-01', classType: 'usb', name: 'Studio DAC', status: 'ok' },
 ]
-
-const summaryCards = computed(() => {
-  const total = devices.value.length
-  const healthy = devices.value.filter((device) => device.status?.toLowerCase() === 'ok').length
-  const attention = total - healthy
-
-  return [
-    {
-      label: '已连接设备',
-      value: `${total}`,
-      caption: '常用外设状态一目了然。',
-      icon: Cpu,
-    },
-    {
-      label: '运行正常',
-      value: `${healthy}`,
-      caption: '当前可继续使用，无需额外处理。',
-      icon: RadioTower,
-    },
-    {
-      label: '需要关注',
-      value: `${attention}`,
-      caption: '建议前往设备管理查看详情。',
-      icon: Sparkles,
-    },
-  ]
-})
-
 const featuredDevices = computed(() => devices.value.slice(0, 6))
 
 function getDeviceLabel(classType: string | null | undefined) {
