@@ -153,16 +153,6 @@ onUnmounted(() => {
   <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
     <section class="apple-section rounded-[2.5rem] px-8 py-10 lg:px-12">
       <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div class="max-w-3xl space-y-4">
-          <Badge variant="outline" class="w-fit rounded-full">设备管理</Badge>
-          <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] lg:text-5xl">
-            查看受信移动端、当前 WebSocket 会话状态，以及局域网发现是否对外广播。
-          </h2>
-          <p class="text-base leading-7 text-muted-foreground">
-            在线与连接状态现在优先由 WebSocket 会话驱动。mDNS 只负责让移动端发现这台 PC，不再承担实时状态同步。
-          </p>
-        </div>
-
         <div class="flex flex-wrap items-center gap-3">
           <Button variant="outline" class="rounded-full" :disabled="mdnsPending" @click="toggleMdns">
             <component :is="mdnsEnabled ? Wifi : WifiOff" class="size-4" />
@@ -261,36 +251,6 @@ onUnmounted(() => {
         </CardContent>
       </Card>
 
-      <div class="flex flex-col gap-6">
-        <Card class="apple-section apple-inverse border-0">
-          <CardHeader class="gap-3">
-            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">发现状态</Badge>
-            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-              mDNS 广播现在可按需开关
-            </CardTitle>
-            <CardDescription class="text-white/70">
-              这台 PC 即使收起到系统托盘，只要应用进程还活着且开关为开启，局域网发现就会持续广播。
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4 text-sm leading-6 text-white/74">
-            <div class="flex items-start gap-3">
-              <Globe class="mt-0.5 size-4 text-white/80" />
-              <p>
-                当前状态：
-                <span class="font-medium text-white">{{ mdnsEnabled ? '已开启' : '已关闭' }}</span>
-              </p>
-            </div>
-            <div class="flex items-start gap-3">
-              <Wifi class="mt-0.5 size-4 text-white/80" />
-              <p>开启时移动端可以自动发现 PC；关闭后仍可使用已保存 IP 或手动配对。</p>
-            </div>
-            <div class="flex items-start gap-3">
-              <WifiOff class="mt-0.5 size-4 text-white/80" />
-              <p>如果你只在少量固定设备间使用，关闭广播可以减少长期驻留时的无谓网络公告。</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   </section>
 </template>

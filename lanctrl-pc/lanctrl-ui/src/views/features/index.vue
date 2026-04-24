@@ -102,19 +102,6 @@ const testPending = ref(false)
 const testStopping = ref(false)
 let testTimer: number | null = null
 
-const testFeature: ActionFeatureDefinition = {
-  featureKey: 'test-long-run',
-  title: '控制演示',
-  description: '演示按钮状态切换与操作反馈效果。',
-  mobileReady: true,
-  control: {
-    type: 'action',
-    buttonText: '开始演示',
-    tone: 'primary',
-    confirmRequired: false,
-  },
-}
-
 async function loadPageData() {
   if (!isTauri()) {
     groups.value = mockFeatureGroups
@@ -270,55 +257,6 @@ onMounted(loadPageData)
 
 <template>
   <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
-    <section class="apple-section apple-inverse rounded-[2.5rem] border-0 px-8 py-10 lg:px-12">
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_360px]">
-        <div class="space-y-5">
-          <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">功能中心</Badge>
-          <div class="space-y-4">
-            <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white lg:text-6xl">
-              常用控制集中在这里，操作更直接。
-            </h2>
-            <p class="max-w-2xl text-base leading-7 text-white/72">
-              无论是系统电源还是主音量，都可以在同一个入口里快速完成，减少来回切换。
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-3">
-            <router-link
-              to="/connected-devices"
-              class="hero-pill border-transparent bg-white text-black hover:bg-white/90"
-            >
-              查看设备
-            </router-link>
-            <button
-              type="button"
-              class="hero-pill border-white/25 bg-white/5 text-white hover:bg-white/12"
-              @click="refreshSnapshot"
-            >
-              刷新当前音量
-            </button>
-          </div>
-        </div>
-
-        <Card class="border-white/10 bg-white/6 text-white shadow-none">
-          <CardHeader class="gap-3">
-            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">
-              最新反馈
-            </Badge>
-            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em] text-white">
-              当前状态
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4 text-sm leading-6 text-white/74">
-            <p>{{ feedback || '选择任意控制项后，结果会显示在这里。' }}</p>
-            <div class="flex items-start gap-3">
-              <ArrowUpRight class="mt-0.5 size-4 text-white/80" />
-              <p>重要操作会立即给出状态反馈，方便确认当前结果。</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </section>
-
     <div
       v-if="feedback"
       class="rounded-[1.75rem] border border-border/70 bg-card/90 px-5 py-4 text-sm text-foreground"
@@ -334,54 +272,6 @@ onMounted(loadPageData)
     </div>
 
     <template v-else>
-      <section class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_360px]">
-        <Card class="apple-section">
-          <CardHeader class="gap-3">
-            <Badge variant="outline" class="w-fit rounded-full">操作演示</Badge>
-            <div class="space-y-2">
-              <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-                状态演示
-              </CardTitle>
-              <CardDescription>
-                先体验按钮反馈与状态切换，再执行真实控制项。
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ActionCard
-              :feature="testFeature"
-              :pending="testPending"
-              :stopping="testStopping"
-              @execute="handleAction"
-              @cancel="handleCancel"
-            />
-          </CardContent>
-        </Card>
-
-        <Card class="apple-section">
-          <CardHeader class="gap-3">
-            <Badge variant="secondary" class="w-fit rounded-full">使用说明</Badge>
-            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
-              操作更集中，反馈更明确。
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4 text-sm leading-6 text-muted-foreground">
-            <div class="flex items-start gap-3">
-              <Power class="mt-0.5 size-4 text-primary" />
-              <p>高风险操作会要求确认，避免误触。</p>
-            </div>
-            <div class="flex items-start gap-3">
-              <SlidersHorizontal class="mt-0.5 size-4 text-primary" />
-              <p>滑杆调整适合连续控制，动作按钮适合即时执行。</p>
-            </div>
-            <div class="flex items-start gap-3">
-              <Sparkles class="mt-0.5 size-4 text-primary" />
-              <p>每次操作完成后，都会在页面内给出结果提示。</p>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
       <section class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_420px]">
         <Card class="apple-section">
           <CardHeader class="gap-3">

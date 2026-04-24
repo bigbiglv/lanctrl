@@ -103,54 +103,6 @@ onUnmounted(async () => {
 
 <template>
   <section class="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
-    <section class="apple-section apple-inverse overflow-hidden rounded-[2.5rem] border-0">
-      <div class="grid gap-8 px-8 py-10 lg:grid-cols-[minmax(0,1.2fr)_380px] lg:px-12 lg:py-14">
-        <div class="space-y-6">
-          <Badge class="rounded-full border-white/20 bg-white/10 px-3 py-1 text-white">
-            总览 · {{ featuredDevices.length }} 台设备在线展示
-          </Badge>
-
-          <div class="space-y-4">
-            <h2 class="max-w-3xl font-[var(--font-display)] text-4xl font-semibold leading-[1.06] tracking-[-0.04em] text-white lg:text-6xl">
-              把常用控制、设备状态与系统操作，集中到同一个桌面入口。
-            </h2>
-            <p class="max-w-2xl text-base leading-7 text-white/72 lg:text-lg">
-              在开始操作前，先快速查看当前设备情况、核心控制项与最近需要关注的状态，让常用操作保持清晰顺手。
-            </p>
-          </div>
-
-          <div class="flex flex-wrap gap-3">
-            <router-link
-              to="/features"
-              class="hero-pill border-transparent bg-white text-black hover:bg-white/90"
-            >
-              打开功能中心
-            </router-link>
-            <router-link
-              to="/connected-devices"
-              class="hero-pill border-white/25 bg-white/5 text-white hover:bg-white/12"
-            >
-              查看设备管理
-            </router-link>
-          </div>
-        </div>
-
-        <div class="grid gap-3">
-          <div
-            v-for="card in summaryCards"
-            :key="card.label"
-            class="rounded-[1.75rem] border border-white/10 bg-white/6 p-5 text-white"
-          >
-            <div class="mb-4 flex items-center justify-between text-white/72">
-              <span class="text-sm">{{ card.label }}</span>
-              <component :is="card.icon" class="size-4" />
-            </div>
-            <div class="text-4xl font-semibold tracking-[-0.04em]">{{ card.value }}</div>
-            <p class="mt-3 text-sm leading-6 text-white/65">{{ card.caption }}</p>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <section class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_420px]">
       <Card class="apple-section border-border/70 bg-card/95">
@@ -198,60 +150,6 @@ onUnmounted(async () => {
         </CardContent>
       </Card>
 
-      <div class="flex flex-col gap-6">
-        <Card class="apple-section apple-inverse border-0">
-          <CardHeader class="gap-3">
-            <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">
-              常用入口
-            </Badge>
-            <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em] text-white">
-              常用操作放在更近的位置。
-            </CardTitle>
-            <CardDescription class="text-white/70">
-              将高频控制项收纳到统一入口，减少页面来回切换。
-            </CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4 text-sm leading-6 text-white/74">
-            <div class="flex items-start gap-3">
-              <Power class="mt-0.5 size-4 text-white/80" />
-              <p>电源相关操作集中管理，重要动作更清晰。</p>
-            </div>
-            <div class="flex items-start gap-3">
-              <Volume2 class="mt-0.5 size-4 text-white/80" />
-              <p>音量调整与状态同步可以直接在功能中心完成。</p>
-            </div>
-            <div class="flex items-start gap-3">
-              <ExternalLink class="mt-0.5 size-4 text-white/80" />
-              <p>设备管理页提供更完整的连接信息与操作入口。</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card class="apple-section">
-          <CardHeader class="gap-2">
-            <CardTitle class="font-[var(--font-display)] text-2xl tracking-[-0.03em]">
-              快速入口
-            </CardTitle>
-            <CardDescription>从这里直接进入常用页面。</CardDescription>
-          </CardHeader>
-          <CardContent class="flex flex-col gap-3">
-            <router-link
-              to="/features"
-              class="flex items-center justify-between rounded-full border border-border px-4 py-3 text-sm transition-colors hover:bg-accent"
-            >
-              <span>进入功能中心</span>
-              <Sparkles class="size-4 text-primary" />
-            </router-link>
-            <router-link
-              to="/connected-devices"
-              class="flex items-center justify-between rounded-full border border-border px-4 py-3 text-sm transition-colors hover:bg-accent"
-            >
-              <span>管理设备</span>
-              <Cpu class="size-4 text-primary" />
-            </router-link>
-          </CardContent>
-        </Card>
-      </div>
     </section>
   </section>
 </template>

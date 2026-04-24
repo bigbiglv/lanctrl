@@ -86,18 +86,6 @@ onUnmounted(() => {
 
 <template>
   <section class="mx-auto flex w-full max-w-[1240px] flex-col gap-6">
-    <section class="apple-section apple-inverse rounded-[2.5rem] border-0 px-8 py-10 lg:px-12">
-      <Badge class="w-fit rounded-full border-white/15 bg-white/10 text-white">待处理任务</Badge>
-      <div class="mt-4 max-w-3xl space-y-4">
-        <h2 class="font-[var(--font-display)] text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white lg:text-5xl">
-          所有等待执行的任务都带上来源，能直接看出是 PC 自己建的，还是哪台移动端发起的。
-        </h2>
-        <p class="text-base leading-7 text-white/70">
-          任务数据以 PC 为唯一权威。移动端收到 WebSocket 同步事件后，会回拉这份同一任务列表。
-        </p>
-      </div>
-    </section>
-
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_360px]">
       <Card class="apple-section">
         <CardHeader class="gap-3">
@@ -105,9 +93,6 @@ onUnmounted(() => {
           <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
             执行队列
           </CardTitle>
-          <CardDescription>
-            这里展示还没真正落地执行的定时任务。来源字段用于定位是谁创建了它。
-          </CardDescription>
         </CardHeader>
         <CardContent class="grid gap-4">
           <div
