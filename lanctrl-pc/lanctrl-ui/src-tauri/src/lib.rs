@@ -3,6 +3,7 @@ pub mod network;
 mod peripherals;
 mod scheduler;
 pub mod store;
+mod web_console;
 
 use crate::network::server::{
     cleanup_stale_presence, disconnect_client_session, get_clients_with_status,

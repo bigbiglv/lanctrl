@@ -1,0 +1,10 @@
+pub const INDEX_HTML: &str = include_str!("../../../lanctrl-web/src/index.html");
+pub const APP_CSS: &str = include_str!("../../../lanctrl-web/src/styles/app.css");
+pub const MAIN_JS: &str = include_str!("../../../lanctrl-web/src/main.js");
+pub const API_JS: &str = include_str!("../../../lanctrl-web/src/app/api.js");
+pub const DOM_JS: &str = include_str!("../../../lanctrl-web/src/app/dom.js");
+pub const REALTIME_JS: &str = include_str!("../../../lanctrl-web/src/app/realtime.js");
+pub const RENDER_JS: &str = include_str!("../../../lanctrl-web/src/app/render.js");
+pub const ROUTER_JS: &str = include_str!("../../../lanctrl-web/src/app/router.js");
+pub const STATE_JS: &str = include_str!("../../../lanctrl-web/src/app/state.js");
+pub const UTILS_JS: &str = include_str!("../../../lanctrl-web/src/app/utils.js");

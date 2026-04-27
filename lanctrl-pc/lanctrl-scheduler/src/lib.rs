@@ -7,6 +7,7 @@ use uuid::Uuid;
 pub enum TaskOriginKind {
     Pc,
     Mobile,
+    Web,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,6 +31,14 @@ impl TaskOrigin {
         Self {
             kind: TaskOriginKind::Mobile,
             client_id: Some(client_id.into()),
+            client_name: client_name.into(),
+        }
+    }
+
+    pub fn web(client_name: impl Into<String>) -> Self {
+        Self {
+            kind: TaskOriginKind::Web,
+            client_id: None,
             client_name: client_name.into(),
         }
     }

@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 
 use crate::{
     features::execute_feature_command_with_origin,
-    network::server::{broadcast_tasks_sync, ACTIVE_CONNECTIONS},
+    network::server::{broadcast_tasks_sync, broadcast_web_state_sync, ACTIVE_CONNECTIONS},
     store::{TaskHistoryEntry, TaskHistoryStatus, GLOBAL_STORE},
 };
 
@@ -150,6 +150,7 @@ fn spawn_task(app: AppHandle, task: ScheduledTask) {
 fn emit_tasks_changed(app: &AppHandle) {
     let _ = app.emit("scheduled_tasks_changed", serde_json::json!({}));
     broadcast_tasks_sync();
+    broadcast_web_state_sync();
     notify_active_mobile_clients();
 }
 

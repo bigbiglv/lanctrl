@@ -3,8 +3,8 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         ConnectInfo, Query, State,
     },
-    http::StatusCode,
-    response::IntoResponse,
+    http::{header, HeaderMap, StatusCode},
+    response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
@@ -27,7 +27,8 @@ use uuid::Uuid;
 use crate::{
     features::execute_feature_command_with_origin,
     scheduler,
-    store::{PairedClient, GLOBAL_STORE},
+    store::{PairedClient, TaskHistoryEntry, GLOBAL_STORE},
+    web_console,
 };
 
 lazy_static! {
@@ -40,6 +41,8 @@ lazy_static! {
     pub static ref LAST_HEARTBEATS: Arc<Mutex<StdHashMap<String, u64>>> =
         Arc::new(Mutex::new(StdHashMap::new()));
     static ref WS_CONNECTIONS: Arc<Mutex<StdHashMap<String, WsConnectionHandle>>> =
+        Arc::new(Mutex::new(StdHashMap::new()));
+    static ref WEB_CONNECTIONS: Arc<Mutex<StdHashMap<String, mpsc::UnboundedSender<WebServerEvent>>>> =
         Arc::new(Mutex::new(StdHashMap::new()));
 }
 
@@ -133,6 +136,26 @@ enum WsClientEvent {
     Disconnect,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum WebServerEvent {
+    StateSync {
+        groups: Vec<FeatureGroup>,
+        snapshot: Option<FeatureSnapshot>,
+        tasks: Vec<ScheduledTask>,
+        history: Vec<TaskHistoryEntry>,
+    },
+    Pong,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum WebClientEvent {
+    Heartbeat,
+    RequestStateSync,
+    Disconnect,
+}
+
 #[derive(Deserialize)]
 pub struct MobileFeatureCatalogRequest {
     pub client_id: String,
@@ -202,6 +225,35 @@ pub struct TaskCreateResponse {
     pub task: Option<ScheduledTask>,
 }
 
+#[derive(Deserialize)]
+pub struct WebFeatureExecuteRequest {
+    #[serde(flatten)]
+    pub command: FeatureCommand,
+}
+
+#[derive(Deserialize)]
+pub struct WebTaskCreateRequest {
+    pub execute_at_ms: u64,
+    #[serde(flatten)]
+    pub command: FeatureCommand,
+}
+
+#[derive(Deserialize)]
+pub struct WebTaskCancelRequest {
+    pub task_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebStateResponse {
+    pub success: bool,
+    pub msg: String,
+    pub groups: Vec<FeatureGroup>,
+    pub snapshot: Option<FeatureSnapshot>,
+    pub tasks: Vec<ScheduledTask>,
+    pub history: Vec<TaskHistoryEntry>,
+}
+
 #[derive(Serialize, Clone)]
 pub struct ClientInfo {
     pub client_id: String,
@@ -220,7 +272,7 @@ pub async fn start_server(port: u16, tauri_app: AppHandle) {
 
     let state = AppState { tauri_app };
 
-    let app = Router::new()
+    let mobile_routes = Router::new()
         .route("/auth/pair", post(auth_pair))
         .route("/auth/verify", post(auth_verify))
         .route("/auth/connect", post(auth_connect))
@@ -232,7 +284,29 @@ pub async fn start_server(port: u16, tauri_app: AppHandle) {
         .route("/tasks/list", post(tasks_list))
         .route("/tasks/create", post(tasks_create))
         .route("/tasks/cancel", post(tasks_cancel))
-        .layer(cors)
+        .layer(cors);
+
+    let web_routes = Router::new()
+        .route("/web", get(web_index))
+        .route("/web/", get(web_index))
+        .route("/web/assets/styles/app.css", get(web_css))
+        .route("/web/assets/main.js", get(web_main_js))
+        .route("/web/assets/app/api.js", get(web_api_js))
+        .route("/web/assets/app/dom.js", get(web_dom_js))
+        .route("/web/assets/app/realtime.js", get(web_realtime_js))
+        .route("/web/assets/app/render.js", get(web_render_js))
+        .route("/web/assets/app/router.js", get(web_router_js))
+        .route("/web/assets/app/state.js", get(web_state_js))
+        .route("/web/assets/app/utils.js", get(web_utils_js))
+        .route("/web/ws", get(web_ws))
+        .route("/web/api/state", get(web_state))
+        .route("/web/api/features/execute", post(web_features_execute))
+        .route("/web/api/tasks/create", post(web_tasks_create))
+        .route("/web/api/tasks/cancel", post(web_tasks_cancel));
+
+    let app = Router::new()
+        .merge(mobile_routes)
+        .merge(web_routes)
         .with_state(state)
         .into_make_service_with_connect_info::<SocketAddr>();
 
@@ -258,6 +332,48 @@ fn current_timestamp_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or_default()
+}
+
+fn is_lan_or_loopback(addr: &SocketAddr) -> bool {
+    match addr.ip() {
+        std::net::IpAddr::V4(ip) => {
+            ip.is_loopback() || ip.is_private() || ip.is_link_local()
+        }
+        std::net::IpAddr::V6(ip) => {
+            ip.is_loopback()
+                || ip.is_unique_local()
+                || ip.segments()[0] & 0xffc0 == 0xfe80
+        }
+    }
+}
+
+fn reject_non_lan(addr: &SocketAddr) -> Option<impl IntoResponse> {
+    if is_lan_or_loopback(addr) {
+        None
+    } else {
+        Some((StatusCode::FORBIDDEN, "Web console is only available on the local network"))
+    }
+}
+
+fn web_state_payload() -> WebStateResponse {
+    WebStateResponse {
+        success: true,
+        msg: "OK".into(),
+        groups: get_feature_groups(),
+        snapshot: get_feature_snapshot().ok(),
+        tasks: scheduler::list_tasks(),
+        history: scheduler::list_task_history(),
+    }
+}
+
+fn web_state_event() -> WebServerEvent {
+    let state = web_state_payload();
+    WebServerEvent::StateSync {
+        groups: state.groups,
+        snapshot: state.snapshot,
+        tasks: state.tasks,
+        history: state.history,
+    }
 }
 
 fn emit_clients_changed(app: &AppHandle) {
@@ -661,6 +777,96 @@ async fn handle_ws_session(
     let _ = mark_client_offline(&app, &client_id);
 }
 
+async fn web_ws(
+    ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> impl IntoResponse {
+    if let Some(response) = reject_non_lan(&addr) {
+        return response.into_response();
+    }
+
+    ws.on_upgrade(move |socket| handle_web_ws(socket, addr))
+        .into_response()
+}
+
+async fn handle_web_ws(socket: WebSocket, addr: SocketAddr) {
+    let connection_id = Uuid::new_v4().to_string();
+    let (mut ws_sender, mut ws_receiver) = socket.split();
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<WebServerEvent>();
+
+    WEB_CONNECTIONS
+        .lock()
+        .unwrap()
+        .insert(connection_id.clone(), out_tx.clone());
+
+    let _ = out_tx.send(web_state_event());
+
+    let writer_connection_id = connection_id.clone();
+    let writer = tokio::spawn(async move {
+        while let Some(event) = out_rx.recv().await {
+            let payload = match serde_json::to_string(&event) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    log::error!("Failed to serialize web ws event: {}", error);
+                    continue;
+                }
+            };
+
+            if ws_sender.send(Message::Text(payload.into())).await.is_err() {
+                break;
+            }
+        }
+
+        WEB_CONNECTIONS
+            .lock()
+            .unwrap()
+            .remove(&writer_connection_id);
+    });
+
+    while let Some(message) = ws_receiver.next().await {
+        let Ok(message) = message else {
+            break;
+        };
+
+        match message {
+            Message::Text(text) => {
+                let Ok(event) = serde_json::from_str::<WebClientEvent>(&text) else {
+                    continue;
+                };
+
+                match event {
+                    WebClientEvent::Heartbeat => {
+                        let _ = out_tx.send(WebServerEvent::Pong);
+                    }
+                    WebClientEvent::RequestStateSync => {
+                        let _ = out_tx.send(web_state_event());
+                    }
+                    WebClientEvent::Disconnect => break,
+                }
+            }
+            Message::Ping(_) | Message::Pong(_) => {}
+            Message::Close(_) => break,
+            Message::Binary(_) => {}
+        }
+    }
+
+    log::debug!("Web console websocket {} closed", addr);
+    WEB_CONNECTIONS.lock().unwrap().remove(&connection_id);
+    writer.abort();
+}
+
+pub fn broadcast_web_state_sync() {
+    let event = web_state_event();
+    let senders = {
+        let connections = WEB_CONNECTIONS.lock().unwrap();
+        connections.values().cloned().collect::<Vec<_>>()
+    };
+
+    for sender in senders {
+        let _ = sender.send(event.clone());
+    }
+}
+
 pub fn broadcast_tasks_sync() {
     let tasks = scheduler::list_tasks();
     let senders = {
@@ -891,6 +1097,190 @@ async fn tasks_cancel(
             msg: "定时任务已停止".into(),
             task: Some(task),
         }),
+        None => Json(TaskCreateResponse {
+            success: false,
+            msg: "未找到可停止的定时任务".into(),
+            task: None,
+        }),
+    }
+}
+
+async fn web_index(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    if let Some(response) = reject_non_lan(&addr) {
+        return response.into_response();
+    }
+
+    Html(web_console::INDEX_HTML).into_response()
+}
+
+async fn web_css(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    if let Some(response) = reject_non_lan(&addr) {
+        return response.into_response();
+    }
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "text/css; charset=utf-8".parse().unwrap(),
+    );
+    headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    (headers, web_console::APP_CSS).into_response()
+}
+
+fn web_js_response(addr: &SocketAddr, content: &'static str) -> axum::response::Response {
+    if let Some(response) = reject_non_lan(addr) {
+        return response.into_response();
+    }
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "text/javascript; charset=utf-8".parse().unwrap(),
+    );
+    headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    (headers, content).into_response()
+}
+
+async fn web_main_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::MAIN_JS)
+}
+
+async fn web_api_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::API_JS)
+}
+
+async fn web_dom_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::DOM_JS)
+}
+
+async fn web_realtime_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::REALTIME_JS)
+}
+
+async fn web_render_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::RENDER_JS)
+}
+
+async fn web_router_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::ROUTER_JS)
+}
+
+async fn web_state_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::STATE_JS)
+}
+
+async fn web_utils_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
+    web_js_response(&addr, web_console::UTILS_JS)
+}
+
+async fn web_state(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Json<WebStateResponse> {
+    if !is_lan_or_loopback(&addr) {
+        return Json(WebStateResponse {
+            success: false,
+            msg: "Web console is only available on the local network".into(),
+            groups: vec![],
+            snapshot: None,
+            tasks: vec![],
+            history: vec![],
+        });
+    }
+
+    Json(web_state_payload())
+}
+
+async fn web_features_execute(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<WebFeatureExecuteRequest>,
+) -> Json<FeatureExecuteResponse> {
+    if !is_lan_or_loopback(&addr) {
+        return Json(FeatureExecuteResponse {
+            success: false,
+            msg: "Web console is only available on the local network".into(),
+            result: None,
+        });
+    }
+
+    let origin = TaskOrigin::web(format!("Web 控制台 {}", addr.ip()));
+    match execute_feature_command_with_origin(&state.tauri_app, payload.command, origin, None) {
+        Ok(result) => {
+            broadcast_web_state_sync();
+            Json(FeatureExecuteResponse {
+                success: true,
+                msg: result.message.clone(),
+                result: Some(result),
+            })
+        }
+        Err(error) => {
+            broadcast_web_state_sync();
+            Json(FeatureExecuteResponse {
+                success: false,
+                msg: error.to_string(),
+                result: None,
+            })
+        }
+    }
+}
+
+async fn web_tasks_create(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<WebTaskCreateRequest>,
+) -> Json<TaskCreateResponse> {
+    if !is_lan_or_loopback(&addr) {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "Web console is only available on the local network".into(),
+            task: None,
+        });
+    }
+
+    if payload.execute_at_ms <= current_timestamp_ms() {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "执行时间必须晚于当前时间".into(),
+            task: None,
+        });
+    }
+
+    let task = ScheduledTask::new(
+        payload.command,
+        payload.execute_at_ms,
+        TaskOrigin::web(format!("Web 控制台 {}", addr.ip())),
+    );
+    let created_task = scheduler::create_task(&state.tauri_app, task);
+    broadcast_web_state_sync();
+
+    Json(TaskCreateResponse {
+        success: true,
+        msg: "定时任务已创建".into(),
+        task: Some(created_task),
+    })
+}
+
+async fn web_tasks_cancel(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Json(payload): Json<WebTaskCancelRequest>,
+) -> Json<TaskCreateResponse> {
+    if !is_lan_or_loopback(&addr) {
+        return Json(TaskCreateResponse {
+            success: false,
+            msg: "Web console is only available on the local network".into(),
+            task: None,
+        });
+    }
+
+    let cancelled_task = scheduler::cancel_task(&state.tauri_app, &payload.task_id);
+    match cancelled_task {
+        Some(task) => {
+            broadcast_web_state_sync();
+            Json(TaskCreateResponse {
+                success: true,
+                msg: "定时任务已停止".into(),
+                task: Some(task),
+            })
+        }
         None => Json(TaskCreateResponse {
             success: false,
             msg: "未找到可停止的定时任务".into(),
