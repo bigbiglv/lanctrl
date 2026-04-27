@@ -6,7 +6,7 @@ import { useRoute } from 'vue-router'
 import MorphIcon from '../common/MorphIcon.vue'
 import { Button } from '../ui/button/index'
 import SettingsOverlay from '../settings/SettingsOverlay.vue'
-import { useTheme } from '../../composables/use-theme'
+import { useTheme } from '@/lib/theme.ts'
 
 const route = useRoute()
 const { mode, toggleThemeMode } = useTheme()
@@ -16,10 +16,10 @@ const settingsSourceRect = ref<DOMRect | null>(null)
 
 const navigationItems = [
   { path: '/', label: '控制台', icon: House },
-  { path: '/pending-tasks', label: '待处理任务', icon: Clock3 },
+  { path: '/pending-tasks', label: '任务', icon: Clock3 },
   { path: '/task-history', label: '任务记录', icon: PanelsTopLeft },
-  { path: '/connected-devices', label: '设备管理', icon: Smartphone },
-  { path: '/features', label: '功能中心', icon: Sparkles },
+  { path: '/connected-devices', label: '设备', icon: Smartphone },
+  { path: '/features', label: '功能', icon: Sparkles },
 ] as const
 
 const currentTitle = computed(() => String(route.meta.title ?? 'LanCtrl'))
@@ -56,19 +56,6 @@ function handleSettingsClosed() {
 <template>
   <header class="nav-shell">
     <div class="nav-inner">
-      <div class="brand-block">
-        <router-link to="/" class="brand-mark">
-          <span class="brand-grid"></span>
-          <span class="brand-wordmark">LanCtrl</span>
-        </router-link>
-
-        <div class="brand-copy">
-          <p class="brand-kicker">Desktop Control Suite</p>
-          <h1>{{ currentTitle }}</h1>
-          <p>{{ currentDescription }}</p>
-        </div>
-      </div>
-
       <nav class="nav-links">
         <router-link
           v-for="item in navigationItems"
