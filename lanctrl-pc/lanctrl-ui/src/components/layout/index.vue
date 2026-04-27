@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import TopBar from './TopBar.vue'
+import Navbar from './Navbar.vue'
 </script>
 
 <template>
   <div class="layout-shell">
-    <TopBar />
+    <Navbar />
 
     <main class="layout-main">
       <router-view v-slot="{ Component }">
