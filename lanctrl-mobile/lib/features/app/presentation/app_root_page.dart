@@ -280,7 +280,10 @@ class _ConnectOnboarding extends ConsumerWidget {
                             ? CupertinoIcons.arrow_2_circlepath
                             : CupertinoIcons.link,
                         accent: palette.heroGlow,
-                        onPressed: !isOnline || state.isConnecting
+                        onPressed:
+                            (!isOnline &&
+                                    device.macAddress?.isNotEmpty != true) ||
+                                state.isConnecting
                             ? null
                             : () async {
                                 final message = await controller

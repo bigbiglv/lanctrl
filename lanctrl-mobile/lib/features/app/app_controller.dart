@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../device/data/auth_api.dart';
 import '../device/data/discovery_service.dart';
 import '../device/data/session_socket_service.dart';
+import '../device/data/wake_on_lan_service.dart';
 import 'domain/app_models.dart';
 
 class AppViewState {
@@ -127,6 +128,7 @@ class AppController extends Notifier<AppViewState> {
 
   StorageService get _storage => ref.read(storageServiceProvider);
   AuthApi get _authApi => ref.read(authApiProvider);
+  WakeOnLanService get _wakeOnLanService => ref.read(wakeOnLanServiceProvider);
 
   @override
   AppViewState build() {
@@ -268,7 +270,15 @@ class AppController extends Notifier<AppViewState> {
 
     final connected = await _authApi.connectDevice(device);
     if (!connected) {
+      final woke = await _wakeAndReconnect(device);
+      if (woke) {
+        return silent ? null : '已唤醒并连接到 ${device.name}';
+      }
+
       state = state.copyWith(isConnecting: false);
+      if (device.macAddress?.isNotEmpty == true) {
+        return '已发送唤醒请求，但电脑暂未上线，请稍后重试';
+      }
       return '连接失败，请确认电脑在线且已经授权';
     }
 
@@ -291,6 +301,48 @@ class AppController extends Notifier<AppViewState> {
 
     await refreshRemoteState();
     return silent ? null : '已连接到 ${device.name}';
+  }
+
+  Future<bool> _wakeAndReconnect(KnownDevice device) async {
+    final wakeSent = await _wakeOnLanService.wake(device);
+    if (!wakeSent) {
+      return false;
+    }
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+
+      final refreshedDevice = KnownDevice.fromMap(
+        _storage.getDevice(device.deviceId),
+      );
+      final target = refreshedDevice.deviceId.isNotEmpty
+          ? refreshedDevice
+          : device;
+      final connected = await _authApi.connectDevice(target);
+      if (!connected) {
+        continue;
+      }
+
+      final socketConnected = await SessionSocketService.instance.connect(
+        target,
+        _storage,
+      );
+      if (!socketConnected) {
+        continue;
+      }
+
+      await _storage.setActiveDeviceId(target.deviceId);
+      state = state.copyWith(
+        activeDeviceId: target.deviceId,
+        connectedDeviceId: target.deviceId,
+        isConnecting: false,
+        section: AppSection.tasks,
+      );
+      await refreshRemoteState();
+      return true;
+    }
+
+    return false;
   }
 
   Future<String?> disconnectActiveDevice() async {
@@ -356,6 +408,8 @@ class AppController extends Notifier<AppViewState> {
       device.port,
       device.name,
       device.deviceId,
+      macAddress: device.macAddress,
+      broadcastAddress: device.broadcastAddress,
     );
     state = state.copyWith(isPairing: false);
 

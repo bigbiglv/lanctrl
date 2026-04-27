@@ -12,6 +12,8 @@ class KnownDevice {
     required this.name,
     required this.ip,
     required this.port,
+    this.macAddress,
+    this.broadcastAddress,
     this.lastSeenAt,
   });
 
@@ -19,6 +21,8 @@ class KnownDevice {
   final String name;
   final String ip;
   final int port;
+  final String? macAddress;
+  final String? broadcastAddress;
   final int? lastSeenAt;
 
   factory KnownDevice.fromMap(Map<String, dynamic> map) {
@@ -27,6 +31,8 @@ class KnownDevice {
       name: map['name'] as String? ?? '未知设备',
       ip: map['ip'] as String? ?? '',
       port: (map['port'] as num?)?.toInt() ?? 3000,
+      macAddress: map['macAddress'] as String?,
+      broadcastAddress: map['broadcastAddress'] as String?,
       lastSeenAt: (map['lastSeenAt'] as num?)?.toInt(),
     );
   }

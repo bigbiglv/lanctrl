@@ -64,13 +64,22 @@ class StorageService {
     String deviceId,
     String name,
     String ip,
-    int port,
-  ) async {
+    int port, {
+    String? macAddress,
+    String? broadcastAddress,
+  }) async {
+    final existing = getDevice(deviceId);
     final device = <String, dynamic>{
       'deviceId': deviceId,
       'name': name,
       'ip': ip,
       'port': port,
+      if ((macAddress ?? existing['macAddress'] as String?)?.isNotEmpty == true)
+        'macAddress': macAddress ?? existing['macAddress'],
+      if ((broadcastAddress ?? existing['broadcastAddress'] as String?)
+              ?.isNotEmpty ==
+          true)
+        'broadcastAddress': broadcastAddress ?? existing['broadcastAddress'],
       'lastSeenAt': DateTime.now().millisecondsSinceEpoch,
     };
 

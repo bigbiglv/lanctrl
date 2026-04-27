@@ -16,8 +16,10 @@ class AuthApi {
     String ip,
     int port,
     String deviceName,
-    String deviceId,
-  ) async {
+    String deviceId, {
+    String? macAddress,
+    String? broadcastAddress,
+  }) async {
     final url = 'http://$ip:$port/auth/pair';
     final clientName = await DeviceIdentityService.currentClientName();
 
@@ -38,6 +40,8 @@ class AuthApi {
           returnedDeviceName,
           ip,
           port,
+          macAddress: macAddress,
+          broadcastAddress: broadcastAddress,
         );
         return data['token'] as String;
       }

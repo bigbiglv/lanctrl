@@ -14,12 +14,16 @@ class LanDevice {
     required this.name,
     required this.ip,
     required this.port,
+    this.macAddress,
+    this.broadcastAddress,
   });
 
   final String deviceId;
   final String name;
   final String ip;
   final int port;
+  final String? macAddress;
+  final String? broadcastAddress;
 }
 
 class DiscoveryService {
@@ -87,6 +91,12 @@ class DiscoveryService {
         final deviceName = txt['deviceName'] != null
             ? utf8.decode(txt['deviceName']!)
             : (service.name ?? '未知电脑');
+        final macAddress = txt['macAddress'] != null
+            ? utf8.decode(txt['macAddress']!)
+            : null;
+        final broadcastAddress = txt['broadcastAddress'] != null
+            ? utf8.decode(txt['broadcastAddress']!)
+            : null;
         final endpoint = _resolveEndpoint(service);
         final port = service.port ?? 3000;
 
@@ -99,6 +109,8 @@ class DiscoveryService {
           name: deviceName,
           ip: endpoint,
           port: port,
+          macAddress: macAddress,
+          broadcastAddress: broadcastAddress,
         );
         devicesById[deviceId] = device;
 
@@ -106,8 +118,17 @@ class DiscoveryService {
         if (knownDevice.deviceId.isNotEmpty &&
             (knownDevice.ip != endpoint ||
                 knownDevice.port != port ||
-                knownDevice.name != deviceName)) {
-          _storage.saveDevice(deviceId, deviceName, endpoint, port);
+                knownDevice.name != deviceName ||
+                knownDevice.macAddress != macAddress ||
+                knownDevice.broadcastAddress != broadcastAddress)) {
+          _storage.saveDevice(
+            deviceId,
+            deviceName,
+            endpoint,
+            port,
+            macAddress: macAddress,
+            broadcastAddress: broadcastAddress,
+          );
         }
       } catch (error, stackTrace) {
         debugPrint('局域网设备解析失败: $error');
