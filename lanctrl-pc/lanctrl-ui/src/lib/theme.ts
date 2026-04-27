@@ -1,4 +1,6 @@
 import { reactive, toRef } from 'vue'
+import { isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { themeOptions, themeRegistry, type ThemeId } from '../themes/index'
 import type { ThemeMode, ThemeTokens } from '../themes/types'
 
@@ -46,6 +48,19 @@ function applyTokens(tokens: ThemeTokens) {
   })
 }
 
+async function syncNativeTheme(mode: ThemeMode) {
+  if (!isTauri()) {
+    return
+  }
+
+  try {
+    await getCurrentWindow().setTheme(mode)
+  } catch (error) {
+    // 原生窗口主题同步失败时，页面主题仍然保持可用。
+    console.warn('同步原生窗口主题失败', error)
+  }
+}
+
 function applyThemeState() {
   const root = getRootElement()
   if (!root) {
@@ -58,6 +73,7 @@ function applyThemeState() {
   root.dataset.mode = state.mode
   root.classList.toggle('dark', state.mode === 'dark')
   root.style.colorScheme = state.mode
+  void syncNativeTheme(state.mode)
 }
 
 function resolveStoredThemeId(): ThemeId {
