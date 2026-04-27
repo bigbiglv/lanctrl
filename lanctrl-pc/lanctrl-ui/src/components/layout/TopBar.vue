@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { mdiMoonWaningCrescent, mdiWeatherSunny } from '@mdi/js'
-import { Clock3, House, PanelsTopLeft, Smartphone, Sparkles } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { Clock3, House, PanelsTopLeft, Settings, Smartphone, Sparkles } from 'lucide-vue-next'
+import { computed, ref, type ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
 import MorphIcon from '../common/MorphIcon.vue'
 import { Button } from '../ui/button/index'
+import SettingsOverlay from '../settings/SettingsOverlay.vue'
 import { useTheme } from '../../composables/use-theme'
 
 const route = useRoute()
 const { mode, toggleThemeMode } = useTheme()
+const settingsButtonRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
+const settingsVisible = ref(false)
+const settingsSourceRect = ref<DOMRect | null>(null)
 
 const navigationItems = [
   { path: '/', label: '控制台', icon: House },
@@ -28,6 +32,24 @@ const themeIconIndex = computed(() => (mode.value === 'dark' ? 1 : 0))
 
 function isNavigationItemActive(path: string) {
   return route.path === path
+}
+
+function resolveElement(target: HTMLElement | ComponentPublicInstance | null) {
+  if (target instanceof HTMLElement) {
+    return target
+  }
+
+  return target?.$el instanceof HTMLElement ? target.$el : null
+}
+
+function openSettings() {
+  const buttonElement = resolveElement(settingsButtonRef.value)
+  settingsSourceRect.value = buttonElement?.getBoundingClientRect() ?? null
+  settingsVisible.value = true
+}
+
+function handleSettingsClosed() {
+  settingsVisible.value = false
 }
 </script>
 
@@ -61,11 +83,34 @@ function isNavigationItemActive(path: string) {
       </nav>
 
       <div class="nav-actions">
-        <Button variant="outline" size="icon" class="theme-button" @click="toggleThemeMode">
+        <Button
+          ref="settingsButtonRef"
+          variant="outline"
+          size="icon"
+          class="nav-icon-button settings-button"
+          aria-label="打开设置"
+          @click="openSettings"
+        >
+          <Settings class="size-4" />
+        </Button>
+
+        <Button
+          variant="outline"
+          size="icon"
+          class="nav-icon-button theme-button"
+          aria-label="切换深色模式"
+          @click="toggleThemeMode"
+        >
           <MorphIcon :paths="themeIconPaths" :active-index="themeIconIndex" size="1rem" />
         </Button>
       </div>
     </div>
+
+    <SettingsOverlay
+      v-if="settingsVisible"
+      :source-rect="settingsSourceRect"
+      @closed="handleSettingsClosed"
+    />
   </header>
 </template>
 
@@ -224,9 +269,35 @@ function isNavigationItemActive(path: string) {
   background: var(--app-success);
 }
 
-.theme-button {
+.nav-icon-button {
   border-radius: 999px;
   background: color-mix(in oklab, var(--card) 88%, transparent);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.nav-icon-button:hover {
+  border-color: color-mix(in oklab, var(--primary) 42%, var(--app-nav-border));
+  background: color-mix(in oklab, var(--primary) 11%, var(--card));
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  color: var(--app-nav-foreground);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.nav-icon-button:active {
+  transform: translateY(0) scale(0.92);
+}
+
+.settings-button :deep(svg) {
+  transition: transform 220ms ease;
+}
+
+.settings-button:hover :deep(svg) {
+  transform: rotate(24deg);
 }
 
 @media (max-width: 1280px) {

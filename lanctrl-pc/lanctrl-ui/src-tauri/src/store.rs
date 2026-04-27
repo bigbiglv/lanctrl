@@ -13,6 +13,10 @@ fn default_mdns_enabled() -> bool {
     true
 }
 
+fn default_close_to_tray_on_close() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PairedClient {
     pub client_id: String,
@@ -77,6 +81,8 @@ pub struct AppConfig {
     pub task_history: Vec<TaskHistoryEntry>,
     #[serde(default = "default_mdns_enabled")]
     pub mdns_enabled: bool,
+    #[serde(default = "default_close_to_tray_on_close")]
+    pub close_to_tray_on_close: bool,
 }
 
 impl Default for AppConfig {
@@ -92,6 +98,7 @@ impl Default for AppConfig {
             scheduled_tasks: Vec::new(),
             task_history: Vec::new(),
             mdns_enabled: true,
+            close_to_tray_on_close: true,
         }
     }
 }
@@ -208,6 +215,11 @@ impl Store {
 
     pub fn set_mdns_enabled(&mut self, enabled: bool) {
         self.data.mdns_enabled = enabled;
+        self.save();
+    }
+
+    pub fn set_close_to_tray_on_close(&mut self, enabled: bool) {
+        self.data.close_to_tray_on_close = enabled;
         self.save();
     }
 }

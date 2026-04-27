@@ -13,8 +13,15 @@ use mdns_sd::ServiceDaemon;
 use serde::Serialize;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{Emitter, Manager, State};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State, WindowEvent,
+};
 use tokio::time::MissedTickBehavior;
+
+const TRAY_MENU_SHOW: &str = "show";
+const TRAY_MENU_EXIT: &str = "exit";
 
 #[derive(Default)]
 struct MdnsRuntime {
@@ -25,6 +32,12 @@ struct MdnsRuntime {
 #[serde(rename_all = "camelCase")]
 struct MdnsStatus {
     enabled: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CloseBehavior {
+    close_to_tray_on_close: bool,
 }
 
 fn current_mdns_enabled() -> bool {
@@ -88,6 +101,66 @@ fn get_mdns_status() -> MdnsStatus {
     MdnsStatus {
         enabled: current_mdns_enabled(),
     }
+}
+
+#[tauri::command]
+fn get_close_behavior() -> CloseBehavior {
+    let store = store::GLOBAL_STORE.lock().unwrap();
+    CloseBehavior {
+        close_to_tray_on_close: store.data.close_to_tray_on_close,
+    }
+}
+
+#[tauri::command]
+fn set_close_to_tray_on_close(enabled: bool) -> CloseBehavior {
+    let mut store = store::GLOBAL_STORE.lock().unwrap();
+    store.set_close_to_tray_on_close(enabled);
+    CloseBehavior {
+        close_to_tray_on_close: enabled,
+    }
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, TRAY_MENU_SHOW, "打开 LanCtrl", true, None::<&str>)?;
+    let exit = MenuItem::with_id(app, TRAY_MENU_EXIT, "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &exit])?;
+
+    let mut tray = TrayIconBuilder::new()
+        .tooltip("LanCtrl")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_MENU_SHOW => show_main_window(app),
+            TRAY_MENU_EXIT => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } => show_main_window(tray.app_handle()),
+            _ => {}
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+
+    tray.build(app)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -166,6 +239,8 @@ pub fn run() {
             get_task_history_entries,
             get_mdns_status,
             set_mdns_enabled,
+            get_close_behavior,
+            set_close_to_tray_on_close,
             remove_paired_client,
             ping_mobile_device,
             notify_mobile_disconnect
@@ -182,6 +257,8 @@ pub fn run() {
             if let Ok(app_dir) = app.path().app_data_dir() {
                 store::init_store(app_dir);
             }
+
+            setup_system_tray(app)?;
 
             scheduler::init(&app.handle().clone());
 
@@ -216,6 +293,19 @@ pub fn run() {
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let close_to_tray_on_close = {
+                    let store = store::GLOBAL_STORE.lock().unwrap();
+                    store.data.close_to_tray_on_close
+                };
+
+                if close_to_tray_on_close {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
