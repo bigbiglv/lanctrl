@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { Badge } from '../../components/ui/badge/index'
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '../../components/ui/card/index'
 import ActionCard from './components/ActionCard.vue'
 import RangeCard from './components/RangeCard.vue'

@@ -78,10 +78,10 @@ pub fn current_timestamp_ms() -> u64 {
 
 pub fn describe_command(command: &FeatureCommand) -> String {
     match command {
-        FeatureCommand::Shutdown => "瀹氭椂鍏虫満".into(),
-        FeatureCommand::Restart => "瀹氭椂閲嶅惎".into(),
-        FeatureCommand::TestNotification => "瀹氭椂娴嬭瘯鎻愮ず".into(),
-        FeatureCommand::Volume { level } => format!("瀹氭椂闊抽噺璋冩暣鍒?{level}%"),
+        FeatureCommand::Shutdown => "定时关机".into(),
+        FeatureCommand::Restart => "定时重启".into(),
+        FeatureCommand::TestNotification => "定时测试提示".into(),
+        FeatureCommand::Volume { level } => format!("定时音量调整到 {level}%"),
     }
 }
 
@@ -99,7 +99,7 @@ mod tests {
         );
 
         assert!(!task.task_id.is_empty());
-        assert_eq!(task.title, "瀹氭椂鍏虫満");
+        assert_eq!(task.title, "定时关机");
         assert_eq!(task.execute_at_ms, 1_700_000_000_000);
         assert_eq!(task.origin.client_name, "PC");
     }

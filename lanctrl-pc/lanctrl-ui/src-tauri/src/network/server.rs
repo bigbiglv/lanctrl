@@ -289,15 +289,8 @@ pub async fn start_server(port: u16, tauri_app: AppHandle) {
     let web_routes = Router::new()
         .route("/web", get(web_index))
         .route("/web/", get(web_index))
-        .route("/web/assets/styles/app.css", get(web_css))
+        .route("/web/assets/style.css", get(web_css))
         .route("/web/assets/main.js", get(web_main_js))
-        .route("/web/assets/app/api.js", get(web_api_js))
-        .route("/web/assets/app/dom.js", get(web_dom_js))
-        .route("/web/assets/app/realtime.js", get(web_realtime_js))
-        .route("/web/assets/app/render.js", get(web_render_js))
-        .route("/web/assets/app/router.js", get(web_router_js))
-        .route("/web/assets/app/state.js", get(web_state_js))
-        .route("/web/assets/app/utils.js", get(web_utils_js))
         .route("/web/ws", get(web_ws))
         .route("/web/api/state", get(web_state))
         .route("/web/api/features/execute", post(web_features_execute))
@@ -1143,34 +1136,6 @@ fn web_js_response(addr: &SocketAddr, content: &'static str) -> axum::response::
 
 async fn web_main_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
     web_js_response(&addr, web_console::MAIN_JS)
-}
-
-async fn web_api_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::API_JS)
-}
-
-async fn web_dom_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::DOM_JS)
-}
-
-async fn web_realtime_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::REALTIME_JS)
-}
-
-async fn web_render_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::RENDER_JS)
-}
-
-async fn web_router_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::ROUTER_JS)
-}
-
-async fn web_state_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::STATE_JS)
-}
-
-async fn web_utils_js(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    web_js_response(&addr, web_console::UTILS_JS)
 }
 
 async fn web_state(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Json<WebStateResponse> {

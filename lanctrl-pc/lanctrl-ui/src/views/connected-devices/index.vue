@@ -9,7 +9,6 @@ import { Button } from '../../components/ui/button/index'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card/index'
