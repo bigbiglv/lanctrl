@@ -315,9 +315,8 @@ class AppController extends Notifier<AppViewState> {
       final refreshedDevice = KnownDevice.fromMap(
         _storage.getDevice(device.deviceId),
       );
-      final target = refreshedDevice.deviceId.isNotEmpty
-          ? refreshedDevice
-          : device;
+      final target =
+          refreshedDevice.deviceId.isNotEmpty ? refreshedDevice : device;
       final connected = await _authApi.connectDevice(target);
       if (!connected) {
         continue;
@@ -463,28 +462,56 @@ class AppController extends Notifier<AppViewState> {
     required FeatureDefinition feature,
     int? level,
   }) async {
+    return executeFeatureCommand(featureKey: feature.featureKey, level: level);
+  }
+
+  Future<String?> executeFeatureCommand({
+    required String featureKey,
+    int? level,
+  }) async {
     final device = state.activeDevice;
     if (device == null) {
       return '当前没有已连接的设备';
     }
 
-    state = state.copyWith(activeFeatureKey: feature.featureKey);
+    state = state.copyWith(activeFeatureKey: featureKey);
 
     try {
       final result = await _authApi.executeCommand(
         device,
-        feature: feature.featureKey,
+        feature: featureKey,
         level: level,
       );
 
+      final nextSnapshot = result.volumeLevel != null
+          ? FeatureSnapshot(
+              volumeLevel: result.volumeLevel!,
+              appleMusicRunning: result.appleMusicRunning ??
+                  state.snapshot?.appleMusicRunning ??
+                  false,
+              appleMusicPlaybackState: result.appleMusicPlaybackState ??
+                  state.snapshot?.appleMusicPlaybackState ??
+                  'unavailable',
+            )
+          : result.appleMusicRunning != null
+              ? FeatureSnapshot(
+                  volumeLevel: state.snapshot?.volumeLevel ?? state.volumeDraft,
+                  appleMusicRunning: result.appleMusicRunning!,
+                  appleMusicPlaybackState: result.appleMusicPlaybackState ??
+                      state.snapshot?.appleMusicPlaybackState ??
+                      'unavailable',
+                )
+              : null;
+
       state = state.copyWith(
         clearActiveFeatureKey: true,
-        snapshot: result.volumeLevel != null
-            ? FeatureSnapshot(volumeLevel: result.volumeLevel!)
-            : null,
-        replaceSnapshot: result.volumeLevel != null,
+        snapshot: nextSnapshot,
+        replaceSnapshot: nextSnapshot != null,
         volumeDraft: result.volumeLevel ?? state.volumeDraft,
       );
+      if (result.appleMusicRunning != null) {
+        await refreshRemoteState();
+      }
       return result.message;
     } catch (error) {
       state = state.copyWith(clearActiveFeatureKey: true);

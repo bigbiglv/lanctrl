@@ -70,6 +70,19 @@ class RangeFeatureControl extends FeatureControl {
   final String actionText;
 }
 
+class MediaPlayerFeatureControl extends FeatureControl {
+  const MediaPlayerFeatureControl({required this.actions});
+
+  final List<MediaPlayerAction> actions;
+}
+
+class MediaPlayerAction {
+  const MediaPlayerAction({required this.featureKey, required this.label});
+
+  final String featureKey;
+  final String label;
+}
+
 class FeatureDefinition {
   const FeatureDefinition({
     required this.featureKey,
@@ -87,6 +100,7 @@ class FeatureDefinition {
 
   bool get isAction => control is ActionFeatureControl;
   bool get isRange => control is RangeFeatureControl;
+  bool get isMediaPlayer => control is MediaPlayerFeatureControl;
 }
 
 class FeatureGroup {
@@ -104,9 +118,15 @@ class FeatureGroup {
 }
 
 class FeatureSnapshot {
-  const FeatureSnapshot({required this.volumeLevel});
+  const FeatureSnapshot({
+    required this.volumeLevel,
+    this.appleMusicRunning = false,
+    this.appleMusicPlaybackState = 'unavailable',
+  });
 
   final int volumeLevel;
+  final bool appleMusicRunning;
+  final String appleMusicPlaybackState;
 }
 
 class FeatureExecutionResult {
@@ -114,11 +134,15 @@ class FeatureExecutionResult {
     required this.featureKey,
     required this.message,
     required this.volumeLevel,
+    this.appleMusicRunning,
+    this.appleMusicPlaybackState,
   });
 
   final String featureKey;
   final String message;
   final int? volumeLevel;
+  final bool? appleMusicRunning;
+  final String? appleMusicPlaybackState;
 }
 
 class ScheduledTask {

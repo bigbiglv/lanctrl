@@ -295,6 +295,19 @@ class AuthApi {
           unit: control['unit'] as String? ?? '',
           actionText: control['actionText'] as String? ?? '应用',
         ),
+        'mediaPlayer' => MediaPlayerFeatureControl(
+          actions:
+              (control['actions'] as List<dynamic>? ?? const <dynamic>[])
+                  .map((item) {
+                    final action = item as Map<String, dynamic>;
+                    return MediaPlayerAction(
+                      featureKey: action['featureKey'] as String? ?? '',
+                      label: action['label'] as String? ?? '',
+                    );
+                  })
+                  .where((action) => action.featureKey.isNotEmpty)
+                  .toList(growable: false),
+        ),
         _ => ActionFeatureControl(
           buttonText: control['buttonText'] as String? ?? '执行',
           tone: (control['tone'] as String?) == 'danger'
@@ -309,6 +322,9 @@ class AuthApi {
   FeatureSnapshot _featureSnapshotFromJson(Map<String, dynamic> json) {
     return FeatureSnapshot(
       volumeLevel: (json['volumeLevel'] as num?)?.toInt() ?? 0,
+      appleMusicRunning: json['appleMusicRunning'] as bool? ?? false,
+      appleMusicPlaybackState:
+          json['appleMusicPlaybackState'] as String? ?? 'unavailable',
     );
   }
 
@@ -320,6 +336,8 @@ class AuthApi {
       featureKey: json['featureKey'] as String? ?? '',
       message: json['message'] as String? ?? fallbackMessage,
       volumeLevel: (json['volumeLevel'] as num?)?.toInt(),
+      appleMusicRunning: json['appleMusicRunning'] as bool?,
+      appleMusicPlaybackState: json['appleMusicPlaybackState'] as String?,
     );
   }
 

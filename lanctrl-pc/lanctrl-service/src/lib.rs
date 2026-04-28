@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use lanctrl_control::system;
+use lanctrl_control::{media, system};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +37,16 @@ pub enum FeatureControl {
         unit: String,
         action_text: String,
     },
+    MediaPlayer {
+        actions: Vec<MediaPlayerAction>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaPlayerAction {
+    pub feature_key: String,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +60,8 @@ pub enum FeatureTone {
 #[serde(rename_all = "camelCase")]
 pub struct FeatureSnapshot {
     pub volume_level: u8,
+    pub apple_music_running: bool,
+    pub apple_music_playback_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +72,10 @@ pub enum FeatureCommand {
     TestNotification,
     ErrorTest,
     Volume { level: u8 },
+    AppleMusicOpen,
+    AppleMusicPrevious,
+    AppleMusicPlayPause,
+    AppleMusicNext,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +84,8 @@ pub struct FeatureExecutionResult {
     pub feature_key: String,
     pub message: String,
     pub volume_level: Option<u8>,
+    pub apple_music_running: Option<bool>,
+    pub apple_music_playback_state: Option<String>,
 }
 
 #[derive(Debug)]
@@ -97,20 +115,69 @@ impl From<system::SystemControlError> for FeatureServiceError {
     }
 }
 
+impl From<media::MediaControlError> for FeatureServiceError {
+    fn from(value: media::MediaControlError) -> Self {
+        Self::new(value.to_string())
+    }
+}
+
 pub fn get_feature_groups() -> Vec<FeatureGroup> {
+    let apple_music_running = media::is_apple_music_running();
+    let play_pause_label = match media::get_apple_music_playback_state() {
+        media::AppleMusicPlaybackState::Playing => "暂停",
+        media::AppleMusicPlaybackState::Paused | media::AppleMusicPlaybackState::Stopped => "播放",
+        media::AppleMusicPlaybackState::Unavailable => "播放/暂停",
+    };
+    let apple_music_features = if apple_music_running {
+        vec![FeatureDefinition {
+            feature_key: "apple_music_player".into(),
+            title: "Apple Music".into(),
+            description: "".into(),
+            mobile_ready: true,
+            control: FeatureControl::MediaPlayer {
+                actions: vec![
+                    MediaPlayerAction {
+                        feature_key: "apple_music_previous".into(),
+                        label: "上一曲".into(),
+                    },
+                    MediaPlayerAction {
+                        feature_key: "apple_music_play_pause".into(),
+                        label: play_pause_label.into(),
+                    },
+                    MediaPlayerAction {
+                        feature_key: "apple_music_next".into(),
+                        label: "下一曲".into(),
+                    },
+                ],
+            },
+        }]
+    } else {
+        vec![FeatureDefinition {
+            feature_key: "apple_music_open".into(),
+            title: "Apple Music".into(),
+            description: "".into(),
+            mobile_ready: true,
+            control: FeatureControl::Action {
+                button_text: "打开".into(),
+                tone: FeatureTone::Primary,
+                confirm_required: false,
+            },
+        }]
+    };
+
     vec![
         FeatureGroup {
             group_key: "power".into(),
-            title: "电源控制".into(),
-            description: "执行高风险系统操作前，前端和移动端都应做显式确认。".into(),
+            title: "电源".into(),
+            description: "".into(),
             features: vec![
                 FeatureDefinition {
                     feature_key: "shutdown".into(),
                     title: "关机".into(),
-                    description: "立即关闭当前电脑。".into(),
+                    description: "".into(),
                     mobile_ready: true,
                     control: FeatureControl::Action {
-                        button_text: "立即关机".into(),
+                        button_text: "关机".into(),
                         tone: FeatureTone::Danger,
                         confirm_required: true,
                     },
@@ -118,32 +185,32 @@ pub fn get_feature_groups() -> Vec<FeatureGroup> {
                 FeatureDefinition {
                     feature_key: "restart".into(),
                     title: "重启".into(),
-                    description: "立即重启当前电脑。".into(),
+                    description: "".into(),
                     mobile_ready: true,
                     control: FeatureControl::Action {
-                        button_text: "立即重启".into(),
+                        button_text: "重启".into(),
                         tone: FeatureTone::Danger,
                         confirm_required: true,
                     },
                 },
                 FeatureDefinition {
                     feature_key: "test_notification".into(),
-                    title: "测试提示".into(),
-                    description: "弹出一条提示，用于验证即时执行和定时任务链路。".into(),
+                    title: "测试".into(),
+                    description: "".into(),
                     mobile_ready: true,
                     control: FeatureControl::Action {
-                        button_text: "测试提示".into(),
+                        button_text: "测试".into(),
                         tone: FeatureTone::Primary,
                         confirm_required: false,
                     },
                 },
                 FeatureDefinition {
                     feature_key: "error_test".into(),
-                    title: "错误测试提示".into(),
-                    description: "3 秒后返回测试错误，用于查看 Web 错误提示和失败历史。".into(),
+                    title: "错误测试".into(),
+                    description: "".into(),
                     mobile_ready: true,
                     control: FeatureControl::Action {
-                        button_text: "测试报错".into(),
+                        button_text: "测试".into(),
                         tone: FeatureTone::Primary,
                         confirm_required: false,
                     },
@@ -152,21 +219,27 @@ pub fn get_feature_groups() -> Vec<FeatureGroup> {
         },
         FeatureGroup {
             group_key: "audio".into(),
-            title: "音频控制".into(),
-            description: "统一使用 0 到 100 的音量范围，便于前端与移动端复用。".into(),
+            title: "音频".into(),
+            description: "".into(),
             features: vec![FeatureDefinition {
                 feature_key: "volume".into(),
-                title: "音量调整".into(),
-                description: "读取并设置系统主音量。".into(),
+                title: "音量".into(),
+                description: "".into(),
                 mobile_ready: true,
                 control: FeatureControl::Range {
                     min: 0,
                     max: 100,
                     step: 1,
                     unit: "%".into(),
-                    action_text: "应用音量".into(),
+                    action_text: "应用".into(),
                 },
             }],
+        },
+        FeatureGroup {
+            group_key: "apple_music".into(),
+            title: "Apple Music".into(),
+            description: "".into(),
+            features: apple_music_features,
         },
     ]
 }
@@ -174,6 +247,10 @@ pub fn get_feature_groups() -> Vec<FeatureGroup> {
 pub fn get_feature_snapshot() -> Result<FeatureSnapshot, FeatureServiceError> {
     Ok(FeatureSnapshot {
         volume_level: system::get_system_volume()?,
+        apple_music_running: media::is_apple_music_running(),
+        apple_music_playback_state: media::get_apple_music_playback_state()
+            .as_str()
+            .into(),
     })
 }
 
@@ -183,25 +260,17 @@ pub fn execute_feature_command(
     match command {
         FeatureCommand::Shutdown => {
             system::shutdown()?;
-            Ok(FeatureExecutionResult {
-                feature_key: "shutdown".into(),
-                message: "关机指令已发送。".into(),
-                volume_level: None,
-            })
+            Ok(feature_result("shutdown", "关机指令已发送。", None))
         }
         FeatureCommand::Restart => {
             system::restart()?;
-            Ok(FeatureExecutionResult {
-                feature_key: "restart".into(),
-                message: "重启指令已发送。".into(),
-                volume_level: None,
-            })
+            Ok(feature_result("restart", "重启指令已发送。", None))
         }
-        FeatureCommand::TestNotification => Ok(FeatureExecutionResult {
-            feature_key: "test_notification".into(),
-            message: "测试提示已触发。".into(),
-            volume_level: None,
-        }),
+        FeatureCommand::TestNotification => Ok(feature_result(
+            "test_notification",
+            "测试提示已触发。",
+            None,
+        )),
         FeatureCommand::ErrorTest => {
             std::thread::sleep(std::time::Duration::from_secs(3));
             Err(FeatureServiceError::new(
@@ -210,12 +279,55 @@ pub fn execute_feature_command(
         }
         FeatureCommand::Volume { level } => {
             let applied_level = system::set_system_volume(level)?;
-            Ok(FeatureExecutionResult {
-                feature_key: "volume".into(),
-                message: format!("系统音量已调整到 {applied_level}%"),
-                volume_level: Some(applied_level),
-            })
+            Ok(feature_result(
+                "volume",
+                format!("系统音量已调整到 {applied_level}%"),
+                Some(applied_level),
+            ))
         }
+        FeatureCommand::AppleMusicOpen => {
+            media::open_apple_music()?;
+            Ok(apple_music_result("apple_music_open", "Apple Music 已打开"))
+        }
+        FeatureCommand::AppleMusicPrevious => {
+            media::execute_apple_music_command(media::AppleMusicCommand::Previous)?;
+            Ok(apple_music_result("apple_music_previous", "已切换到上一曲"))
+        }
+        FeatureCommand::AppleMusicPlayPause => {
+            media::execute_apple_music_command(media::AppleMusicCommand::PlayPause)?;
+            Ok(apple_music_result(
+                "apple_music_play_pause",
+                "已切换播放状态",
+            ))
+        }
+        FeatureCommand::AppleMusicNext => {
+            media::execute_apple_music_command(media::AppleMusicCommand::Next)?;
+            Ok(apple_music_result("apple_music_next", "已切换到下一曲"))
+        }
+    }
+}
+
+fn feature_result(
+    feature_key: impl Into<String>,
+    message: impl Into<String>,
+    volume_level: Option<u8>,
+) -> FeatureExecutionResult {
+    FeatureExecutionResult {
+        feature_key: feature_key.into(),
+        message: message.into(),
+        volume_level,
+        apple_music_running: None,
+        apple_music_playback_state: None,
+    }
+}
+
+fn apple_music_result(feature_key: impl Into<String>, message: impl Into<String>) -> FeatureExecutionResult {
+    FeatureExecutionResult {
+        feature_key: feature_key.into(),
+        message: message.into(),
+        volume_level: None,
+        apple_music_running: Some(media::is_apple_music_running()),
+        apple_music_playback_state: Some(media::get_apple_music_playback_state().as_str().into()),
     }
 }
 
@@ -237,6 +349,10 @@ mod tests {
         assert!(feature_keys.contains(&"test_notification"));
         assert!(feature_keys.contains(&"error_test"));
         assert!(feature_keys.contains(&"volume"));
+        assert!(
+            feature_keys.contains(&"apple_music_open")
+                || feature_keys.contains(&"apple_music_player")
+        );
         assert!(groups
             .iter()
             .flat_map(|group| group.features.iter())

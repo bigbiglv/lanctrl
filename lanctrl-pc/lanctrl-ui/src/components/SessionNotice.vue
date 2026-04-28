@@ -3,6 +3,8 @@ import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { onMounted, onUnmounted, ref } from 'vue'
+import { listenAppNotice } from '../composables/useNotice'
+import type { AppNoticePayload, NoticeTone } from '../composables/useNotice'
 
 interface SessionEvent {
   client_id: string
@@ -12,23 +14,24 @@ interface SessionEvent {
 interface FeatureNoticeEvent {
   title: string
   message: string
-  tone: 'success' | 'warning'
+  tone: NoticeTone
 }
 
 const visible = ref(false)
 const message = ref('')
 const title = ref('')
-const tone = ref<'success' | 'warning'>('success')
+const tone = ref<NoticeTone>('success')
 
 let hideTimer: number | null = null
 let unlistenConnected: UnlistenFn | null = null
 let unlistenDisconnected: UnlistenFn | null = null
 let unlistenFeatureNotice: UnlistenFn | null = null
+let unlistenAppNotice: (() => void) | null = null
 
 function showNotice(
   nextMessage: string,
-  nextTone: 'success' | 'warning',
-  nextTitle = nextTone === 'success' ? '连接提示' : '断开提示',
+  nextTone: NoticeTone,
+  nextTitle = nextTone === 'success' ? '连接提示' : '操作提示',
 ) {
   title.value = nextTitle
   message.value = nextMessage
@@ -45,6 +48,14 @@ function showNotice(
 }
 
 onMounted(async () => {
+  unlistenAppNotice = listenAppNotice((payload: AppNoticePayload) => {
+    showNotice(
+      payload.message,
+      payload.tone ?? 'success',
+      payload.title ?? (payload.tone === 'warning' ? '操作提示' : '执行成功'),
+    )
+  })
+
   if (!isTauri()) {
     return
   }
@@ -66,6 +77,7 @@ onUnmounted(() => {
   unlistenConnected?.()
   unlistenDisconnected?.()
   unlistenFeatureNotice?.()
+  unlistenAppNotice?.()
   if (hideTimer !== null) {
     window.clearTimeout(hideTimer)
   }

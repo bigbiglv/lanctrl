@@ -637,6 +637,9 @@ class _TasksPage extends ConsumerWidget {
     final actionFeatures = featureList
         .where((feature) => feature.isAction)
         .toList();
+    final mediaPlayerFeatures = featureList
+        .where((feature) => feature.isMediaPlayer)
+        .toList();
     return ListView(
       physics: const BouncingScrollPhysics(),
       children: [
@@ -702,6 +705,68 @@ class _TasksPage extends ConsumerWidget {
                 })
                 .toList(growable: false),
           ),
+        if (mediaPlayerFeatures.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const _SectionTitle(title: 'Apple Music'),
+          const SizedBox(height: 12),
+          ...mediaPlayerFeatures.map((feature) {
+            final control = feature.control as MediaPlayerFeatureControl;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _GlassPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(CupertinoIcons.music_note_2),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            feature.title,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      feature.description,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: control.actions.map((action) {
+                        return _ActionCapsuleButton(
+                          label: state.activeFeatureKey == action.featureKey
+                              ? '执行中'
+                              : action.label,
+                          icon: _mediaActionIcon(action.featureKey),
+                          onPressed: state.activeFeatureKey == action.featureKey
+                              ? null
+                              : () async {
+                            final message = await controller
+                                .executeFeatureCommand(
+                                  featureKey: action.featureKey,
+                                );
+                            if (message != null) {
+                              onMessage(message);
+                            }
+                          },
+                        );
+                      }).toList(growable: false),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
         const SizedBox(height: 18),
         if (volumeFeature != null) ...[
           const _SectionTitle(title: '音量调节'),
@@ -761,6 +826,16 @@ class _TasksPage extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  IconData _mediaActionIcon(String featureKey) {
+    if (featureKey.endsWith('_previous')) {
+      return CupertinoIcons.backward_end_fill;
+    }
+    if (featureKey.endsWith('_next')) {
+      return CupertinoIcons.forward_end_fill;
+    }
+    return CupertinoIcons.playpause_fill;
   }
 }
 

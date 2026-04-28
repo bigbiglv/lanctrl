@@ -12,7 +12,7 @@ export interface FeatureDefinition {
   title: string;
   description: string;
   mobileReady: boolean;
-  control: ActionControl | RangeControl;
+  control: ActionControl | RangeControl | MediaPlayerControl;
 }
 
 export interface ActionControl {
@@ -31,8 +31,20 @@ export interface RangeControl {
   actionText: string;
 }
 
+export interface MediaPlayerControl {
+  type: "mediaPlayer";
+  actions: MediaPlayerAction[];
+}
+
+export interface MediaPlayerAction {
+  featureKey: string;
+  label: string;
+}
+
 export interface FeatureSnapshot {
   volumeLevel: number;
+  appleMusicRunning: boolean;
+  appleMusicPlaybackState: string;
 }
 
 export type FeatureCommand =
@@ -80,6 +92,8 @@ export interface FeatureExecuteResponse {
     featureKey: string;
     message: string;
     volumeLevel?: number | null;
+    appleMusicRunning?: boolean | null;
+    appleMusicPlaybackState?: string | null;
   } | null;
 }
 

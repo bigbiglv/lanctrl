@@ -7,7 +7,10 @@ export interface FeatureGroup {
   features: FeatureDefinition[]
 }
 
-export type FeatureDefinition = ActionFeatureDefinition | RangeFeatureDefinition
+export type FeatureDefinition =
+  | ActionFeatureDefinition
+  | RangeFeatureDefinition
+  | MediaPlayerFeatureDefinition
 
 export interface FeatureBaseDefinition {
   featureKey: string
@@ -36,8 +39,22 @@ export interface RangeFeatureDefinition extends FeatureBaseDefinition {
   }
 }
 
+export interface MediaPlayerFeatureDefinition extends FeatureBaseDefinition {
+  control: {
+    type: 'mediaPlayer'
+    actions: MediaPlayerAction[]
+  }
+}
+
+export interface MediaPlayerAction {
+  featureKey: string
+  label: string
+}
+
 export interface FeatureSnapshot {
   volumeLevel: number
+  appleMusicRunning: boolean
+  appleMusicPlaybackState: 'playing' | 'paused' | 'stopped' | 'unavailable'
 }
 
 export type FeatureCommand =
@@ -46,11 +63,17 @@ export type FeatureCommand =
   | { feature: 'test_notification' }
   | { feature: 'error_test' }
   | { feature: 'volume'; level: number }
+  | { feature: 'apple_music_open' }
+  | { feature: 'apple_music_previous' }
+  | { feature: 'apple_music_play_pause' }
+  | { feature: 'apple_music_next' }
 
 export interface FeatureExecutionResult {
   featureKey: string
   message: string
   volumeLevel: number | null
+  appleMusicRunning: boolean | null
+  appleMusicPlaybackState: string | null
 }
 
 export function isActionFeature(
@@ -63,4 +86,10 @@ export function isRangeFeature(
   feature: FeatureDefinition,
 ): feature is RangeFeatureDefinition {
   return feature.control.type === 'range'
+}
+
+export function isMediaPlayerFeature(
+  feature: FeatureDefinition,
+): feature is MediaPlayerFeatureDefinition {
+  return feature.control.type === 'mediaPlayer'
 }

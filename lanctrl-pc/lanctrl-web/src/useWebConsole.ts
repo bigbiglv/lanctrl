@@ -160,7 +160,19 @@ export function useWebConsole() {
         throw new Error(payload.msg || "执行失败");
       }
       if (typeof payload.result?.volumeLevel === "number") {
-        snapshot.value = { volumeLevel: payload.result.volumeLevel };
+        snapshot.value = {
+          volumeLevel: payload.result.volumeLevel,
+          appleMusicRunning: snapshot.value?.appleMusicRunning ?? false,
+          appleMusicPlaybackState: snapshot.value?.appleMusicPlaybackState ?? "unavailable",
+        };
+      }
+      if (typeof payload.result?.appleMusicRunning === "boolean") {
+        snapshot.value = {
+          volumeLevel: snapshot.value?.volumeLevel ?? taskVolume.value,
+          appleMusicRunning: payload.result.appleMusicRunning,
+          appleMusicPlaybackState: payload.result.appleMusicPlaybackState ?? snapshot.value?.appleMusicPlaybackState ?? "unavailable",
+        };
+        await refreshState(true);
       }
       showToast(payload.msg || "执行成功");
     } catch (error) {
