@@ -32,29 +32,29 @@ const activeFeatureKey = ref<string | null>(null)
 const mockFeatureGroups: FeatureGroup[] = [
   {
     groupKey: 'power',
-    title: '电源控制',
-    description: '系统电源相关控制能力。',
+    title: '电源',
+    description: '',
     features: [
       {
         featureKey: 'shutdown',
-        title: '安全关机',
-        description: '关闭设备前保存当前工作内容。',
+        title: '关机',
+        description: '',
         mobileReady: true,
         control: {
           type: 'action',
-          buttonText: '立即关机',
+          buttonText: '关机',
           tone: 'danger',
           confirmRequired: true,
         },
       },
       {
         featureKey: 'restart',
-        title: '重新启动',
-        description: '快速重启系统并恢复当前工作环境。',
+        title: '重启',
+        description: '',
         mobileReady: true,
         control: {
           type: 'action',
-          buttonText: '立即重启',
+          buttonText: '重启',
           tone: 'primary',
           confirmRequired: true,
         },
@@ -62,7 +62,7 @@ const mockFeatureGroups: FeatureGroup[] = [
       {
         featureKey: 'apple_music_open',
         title: 'Apple Music',
-        description: '打开 Windows 版 Apple Music。',
+        description: '',
         mobileReady: true,
         control: {
           type: 'action',
@@ -117,12 +117,12 @@ async function loadPageData(options: { notify?: boolean } = {}) {
     groups.value = featureGroups
     currentVolume.value = snapshot.volumeLevel
     if (options.notify) {
-      showAppNotice({ title: '刷新完成', message: '功能状态已更新' })
+      showAppNotice({ title: '刷新完成', message: '状态已更新' })
     }
   } catch (error) {
     showAppNotice({
       title: '刷新失败',
-      message: `无法载入功能状态：${String(error)}`,
+      message: `无法载入状态：${String(error)}`,
       tone: 'warning',
     })
   } finally {
@@ -137,7 +137,7 @@ async function refreshSnapshot() {
     window.setTimeout(() => {
       currentVolume.value = 42
       snapshotRefreshing.value = false
-      showAppNotice({ title: '刷新完成', message: '当前音量已刷新' })
+      showAppNotice({ title: '刷新完成', message: '音量已更新' })
     }, 400)
     return
   }
@@ -147,7 +147,7 @@ async function refreshSnapshot() {
   try {
     const snapshot = await invoke<FeatureSnapshot>('get_feature_snapshot')
     currentVolume.value = snapshot.volumeLevel
-    showAppNotice({ title: '刷新完成', message: `当前音量为 ${snapshot.volumeLevel}%` })
+    showAppNotice({ title: '刷新完成', message: `当前音量 ${snapshot.volumeLevel}%` })
   } catch (error) {
     showAppNotice({
       title: '刷新失败',
@@ -205,12 +205,12 @@ function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
   if (feature.featureKey === 'error_test') return { feature: 'error_test' }
   if (feature.featureKey === 'apple_music_open') return { feature: 'apple_music_open' }
 
-  throw new Error(`未支持的操作指令：${feature.featureKey}`)
+  throw new Error(`未支持的操作：${feature.featureKey}`)
 }
 
 function handleTestAction() {
   testPending.value = true
-  showAppNotice({ title: '执行中', message: '控制演示进行中' })
+  showAppNotice({ title: '执行中', message: '演示进行中' })
 
   testTimer = window.setTimeout(() => {
     testPending.value = false
@@ -295,7 +295,7 @@ onMounted(loadPageData)
       v-if="loading"
       class="rounded-[1.75rem] border border-dashed border-border/80 bg-muted/40 px-6 py-14 text-center text-sm text-muted-foreground"
     >
-      正在载入控制项
+      正在载入
     </div>
 
     <template v-else>

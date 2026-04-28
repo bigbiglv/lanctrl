@@ -37,7 +37,7 @@ function createRequestId() {
 }
 
 const statusLabels: Record<string, string> = {
-  queued: "已排队",
+  queued: "待执行",
   cancelled: "已停止",
   executed: "已完成",
   failed: "失败",
@@ -58,7 +58,7 @@ export function useWebConsole() {
   const taskDelaySeconds = ref(0);
   const toast = ref("");
   const connectionStatus = ref<ConnectionStatus>("connecting");
-  const connectionDetail = ref("等待 WebSocket 状态同步");
+  const connectionDetail = ref("等待同步");
   const now = ref(Date.now());
 
   let toastTimer = 0;
@@ -75,8 +75,11 @@ export function useWebConsole() {
   const allFeatures = computed(() => groups.value.flatMap((group) => group.features));
   const actionFeatures = computed(() => allFeatures.value.filter((feature) => feature.control.type === "action"));
   const rangeFeatures = computed(() => allFeatures.value.filter((feature) => feature.control.type === "range"));
+  const mediaPlayerFeatures = computed(() => allFeatures.value.filter((feature) => feature.control.type === "mediaPlayer"));
+  const schedulableFeatures = computed(() => [...actionFeatures.value, ...rangeFeatures.value]);
   const selectedFeature = computed(() => {
-    return allFeatures.value.find((feature) => feature.featureKey === selectedFeatureKey.value) ?? allFeatures.value[0];
+    return schedulableFeatures.value.find((feature) => feature.featureKey === selectedFeatureKey.value)
+      ?? schedulableFeatures.value[0];
   });
   const selectedFeatureNeedsVolume = computed(() => selectedFeature.value?.control.type === "range");
   const visibleHistory = computed(() => history.value.slice(0, 80));
@@ -87,8 +90,8 @@ export function useWebConsole() {
     tasks.value = payload.tasks ?? [];
     history.value = payload.history ?? [];
 
-    if (!selectedFeatureKey.value || !allFeatures.value.some((feature) => feature.featureKey === selectedFeatureKey.value)) {
-      selectedFeatureKey.value = allFeatures.value[0]?.featureKey ?? "";
+    if (!selectedFeatureKey.value || !schedulableFeatures.value.some((feature) => feature.featureKey === selectedFeatureKey.value)) {
+      selectedFeatureKey.value = schedulableFeatures.value[0]?.featureKey ?? "";
     }
 
     if (typeof snapshot.value?.volumeLevel === "number") {
@@ -101,7 +104,7 @@ export function useWebConsole() {
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => {
       toast.value = "";
-    }, 3600);
+    }, 2600);
   }
 
   function setConnection(status: ConnectionStatus, detail: string) {
@@ -120,7 +123,7 @@ export function useWebConsole() {
   async function refreshState(silent = false) {
     applyState(await fetchState());
     if (!silent) {
-      showToast("状态已刷新");
+      showToast("已刷新");
     }
   }
 
@@ -133,7 +136,7 @@ export function useWebConsole() {
     return new Promise<FeatureExecuteResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         pendingCommands.delete(requestId);
-        reject(new Error("WebSocket 执行超时"));
+        reject(new Error("执行超时"));
       }, 8000);
 
       pendingCommands.set(requestId, { resolve, reject, timer });
@@ -147,7 +150,7 @@ export function useWebConsole() {
 
   async function runFeature(feature: FeatureDefinition, level?: number) {
     if (feature.control.type === "action" && feature.control.confirmRequired) {
-      const confirmed = window.confirm(`确认执行“${feature.title}”？\n${feature.description}`);
+      const confirmed = window.confirm(`确认执行“${feature.title}”吗？`);
       if (!confirmed) {
         return;
       }
@@ -174,7 +177,7 @@ export function useWebConsole() {
         };
         await refreshState(true);
       }
-      showToast(payload.msg || "执行成功");
+      showToast(payload.msg || "已执行");
     } catch (error) {
       showToast(String(error instanceof Error ? error.message : error));
     } finally {
@@ -184,7 +187,7 @@ export function useWebConsole() {
 
   async function submitTask() {
     if (!selectedFeature.value) {
-      showToast("请选择任务类型");
+      showToast("请选择任务");
       return;
     }
 
@@ -197,9 +200,9 @@ export function useWebConsole() {
         : commandForFeature(selectedFeature.value);
       const payload = await createScheduledTask(command, delayMs);
       if (!payload.success) {
-        throw new Error(payload.msg || "创建任务失败");
+        throw new Error(payload.msg || "创建失败");
       }
-      showToast(payload.msg || "定时任务已创建");
+      showToast(payload.msg || "已创建");
     } catch (error) {
       showToast(String(error instanceof Error ? error.message : error));
     }
@@ -209,9 +212,9 @@ export function useWebConsole() {
     try {
       const payload = await cancelScheduledTask(taskId);
       if (!payload.success) {
-        throw new Error(payload.msg || "停止任务失败");
+        throw new Error(payload.msg || "停止失败");
       }
-      showToast(payload.msg || "定时任务已停止");
+      showToast(payload.msg || "已停止");
     } catch (error) {
       showToast(String(error instanceof Error ? error.message : error));
     }
@@ -220,13 +223,13 @@ export function useWebConsole() {
   function connectWebSocket() {
     window.clearTimeout(reconnectTimer);
     window.clearInterval(heartbeatTimer);
-    setConnection("connecting", "正在建立实时通道");
+    setConnection("connecting", "连接中");
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     socket = new WebSocket(`${protocol}//${window.location.host}/web/ws`);
 
     socket.addEventListener("open", () => {
-      setConnection("connected", "任务状态会自动刷新");
+      setConnection("connected", "已连接");
       socket?.send(JSON.stringify({ type: "request_state_sync" }));
       heartbeatTimer = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) {
@@ -256,7 +259,7 @@ export function useWebConsole() {
     });
 
     socket.addEventListener("close", () => {
-      setConnection("offline", "3 秒后自动重连");
+      setConnection("offline", "已断开");
       window.clearInterval(heartbeatTimer);
       pendingCommands.forEach((pending) => {
         window.clearTimeout(pending.timer);
@@ -267,7 +270,7 @@ export function useWebConsole() {
     });
 
     socket.addEventListener("error", () => {
-      setConnection("offline", "实时通道异常");
+      setConnection("offline", "连接异常");
     });
   }
 
@@ -326,9 +329,11 @@ export function useWebConsole() {
     countdownText,
     formatDate,
     groups,
+    mediaPlayerFeatures,
     rangeFeatures,
     refreshState,
     runFeature,
+    schedulableFeatures,
     selectedFeature,
     selectedFeatureKey,
     selectedFeatureNeedsVolume,

@@ -398,6 +398,27 @@ p {
   margin-top: 14px;
 }
 
+.media-card {
+  display: grid;
+  gap: 16px;
+}
+
+.media-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.media-button,
+.media-refresh {
+  padding: 0;
+}
+
+.media-button.running {
+  color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
 .volume-card input[type="range"] {
   width: 100%;
   margin: 8px 0 0;
@@ -456,6 +477,10 @@ input:focus {
 .list-stack {
   display: grid;
   gap: 12px;
+}
+
+.schedule-list {
+  margin-top: 16px;
 }
 
 .list-row {
