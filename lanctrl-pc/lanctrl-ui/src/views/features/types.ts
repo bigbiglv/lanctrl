@@ -55,6 +55,17 @@ export interface FeatureSnapshot {
   volumeLevel: number
   appleMusicRunning: boolean
   appleMusicPlaybackState: 'playing' | 'paused' | 'stopped' | 'unavailable'
+  appleMusicTrack: AppleMusicTrackInfo | null
+}
+
+export interface AppleMusicTrackInfo {
+  title: string | null
+  artist: string | null
+  album: string | null
+  albumArtist: string | null
+  artworkDataUrl: string | null
+  positionMs: number | null
+  durationMs: number | null
 }
 
 export type FeatureCommand =
@@ -74,6 +85,7 @@ export interface FeatureExecutionResult {
   volumeLevel: number | null
   appleMusicRunning: boolean | null
   appleMusicPlaybackState: string | null
+  appleMusicTrack: AppleMusicTrackInfo | null
 }
 
 export function isActionFeature(

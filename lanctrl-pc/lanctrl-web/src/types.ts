@@ -45,6 +45,17 @@ export interface FeatureSnapshot {
   volumeLevel: number;
   appleMusicRunning: boolean;
   appleMusicPlaybackState: string;
+  appleMusicTrack: AppleMusicTrackInfo | null;
+}
+
+export interface AppleMusicTrackInfo {
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  albumArtist: string | null;
+  artworkDataUrl: string | null;
+  positionMs: number | null;
+  durationMs: number | null;
 }
 
 export type FeatureCommand =
@@ -94,6 +105,7 @@ export interface FeatureExecuteResponse {
     volumeLevel?: number | null;
     appleMusicRunning?: boolean | null;
     appleMusicPlaybackState?: string | null;
+    appleMusicTrack?: AppleMusicTrackInfo | null;
   } | null;
 }
 

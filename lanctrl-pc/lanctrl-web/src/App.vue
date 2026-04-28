@@ -23,7 +23,7 @@ import {
 } from "lucide-vue-next";
 import { useTheme } from "./useTheme";
 import { useWebConsole } from "./useWebConsole";
-import type { FeatureDefinition, MediaPlayerAction } from "./types";
+import type { AppleMusicTrackInfo, FeatureDefinition, MediaPlayerAction } from "./types";
 
 const {
   activeFeatureKey,
@@ -70,12 +70,8 @@ const connectionAriaLabel = computed(() => {
 });
 
 const connectionIcon = computed(() => {
-  if (connectionStatus.value === "connected") {
-    return CheckCircle2;
-  }
-  if (connectionStatus.value === "offline") {
-    return AlertTriangle;
-  }
+  if (connectionStatus.value === "connected") return CheckCircle2;
+  if (connectionStatus.value === "offline") return AlertTriangle;
   return LoaderCircle;
 });
 
@@ -102,6 +98,19 @@ function runMediaAction(feature: FeatureDefinition, action: MediaPlayerAction) {
     featureKey: action.featureKey,
     title: action.label,
   });
+}
+
+function formatTime(ms: number | null | undefined) {
+  if (typeof ms !== "number") return "--:--";
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function progressPercent(track: AppleMusicTrackInfo | null | undefined) {
+  if (!track?.positionMs || !track.durationMs) return 0;
+  return Math.min(100, Math.max(0, (track.positionMs / track.durationMs) * 100));
 }
 </script>
 
@@ -166,14 +175,34 @@ function runMediaAction(feature: FeatureDefinition, action: MediaPlayerAction) {
           <article v-for="feature in mediaPlayerFeatures" :key="feature.featureKey" class="control-card media-card">
             <div class="volume-head">
               <div class="action-card-main">
-                <div class="feature-icon">
-                  <Music />
+                <div class="feature-icon media-artwork">
+                  <img
+                    v-if="snapshot?.appleMusicTrack?.artworkDataUrl"
+                    :src="snapshot.appleMusicTrack.artworkDataUrl"
+                    alt=""
+                  >
+                  <Music v-else />
                 </div>
-                <div class="feature-title">{{ feature.title }}</div>
+                <div class="media-title-block">
+                  <div class="feature-title">{{ snapshot?.appleMusicTrack?.title || feature.title }}</div>
+                  <div v-if="snapshot?.appleMusicTrack?.artist || snapshot?.appleMusicTrack?.album" class="list-row-meta">
+                    {{ [snapshot?.appleMusicTrack?.artist, snapshot?.appleMusicTrack?.album].filter(Boolean).join(" · ") }}
+                  </div>
+                </div>
               </div>
               <button class="secondary-button media-refresh" type="button" aria-label="刷新" @click="refreshState()">
                 <RefreshCw class="button-icon" />
               </button>
+            </div>
+
+            <div v-if="snapshot?.appleMusicTrack?.positionMs || snapshot?.appleMusicTrack?.durationMs" class="media-progress">
+              <div class="media-progress-track">
+                <div class="media-progress-value" :style="{ width: `${progressPercent(snapshot?.appleMusicTrack)}%` }" />
+              </div>
+              <div class="media-time-row">
+                <span>{{ formatTime(snapshot?.appleMusicTrack?.positionMs) }}</span>
+                <span>{{ formatTime(snapshot?.appleMusicTrack?.durationMs) }}</span>
+              </div>
             </div>
 
             <div v-if="feature.control.type === 'mediaPlayer'" class="media-actions">
@@ -213,7 +242,7 @@ function runMediaAction(feature: FeatureDefinition, action: MediaPlayerAction) {
             :max="feature.control.max"
             :step="feature.control.step"
             @change="runFeature(feature, taskVolume)"
-          />
+          >
         </article>
       </section>
 
@@ -234,17 +263,17 @@ function runMediaAction(feature: FeatureDefinition, action: MediaPlayerAction) {
 
           <label v-show="selectedFeatureNeedsVolume">
             <span>音量</span>
-            <input v-model.number="taskVolume" type="number" min="0" max="100" step="1" />
+            <input v-model.number="taskVolume" type="number" min="0" max="100" step="1">
           </label>
 
           <label>
             <span>分钟</span>
-            <input v-model.number="taskDelayMinutes" type="number" min="0" max="1440" step="1" />
+            <input v-model.number="taskDelayMinutes" type="number" min="0" max="1440" step="1">
           </label>
 
           <label>
             <span>秒</span>
-            <input v-model.number="taskDelaySeconds" type="number" min="0" max="59" step="1" />
+            <input v-model.number="taskDelaySeconds" type="number" min="0" max="59" step="1">
           </label>
 
           <button class="primary-button confirm-button" type="submit">

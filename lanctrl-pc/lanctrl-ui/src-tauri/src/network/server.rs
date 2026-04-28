@@ -340,13 +340,9 @@ fn current_timestamp_ms() -> u64 {
 
 fn is_lan_or_loopback(addr: &SocketAddr) -> bool {
     match addr.ip() {
-        std::net::IpAddr::V4(ip) => {
-            ip.is_loopback() || ip.is_private() || ip.is_link_local()
-        }
+        std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
         std::net::IpAddr::V6(ip) => {
-            ip.is_loopback()
-                || ip.is_unique_local()
-                || ip.segments()[0] & 0xffc0 == 0xfe80
+            ip.is_loopback() || ip.is_unique_local() || ip.segments()[0] & 0xffc0 == 0xfe80
         }
     }
 }
@@ -355,7 +351,10 @@ fn reject_non_lan(addr: &SocketAddr) -> Option<impl IntoResponse> {
     if is_lan_or_loopback(addr) {
         None
     } else {
-        Some((StatusCode::FORBIDDEN, "Web console is only available on the local network"))
+        Some((
+            StatusCode::FORBIDDEN,
+            "Web console is only available on the local network",
+        ))
     }
 }
 
@@ -852,10 +851,7 @@ async fn handle_web_ws(app: AppHandle, socket: WebSocket, addr: SocketAddr) {
                     } => {
                         let origin = TaskOrigin::web(format!("Web 鎺у埗鍙?{}", addr.ip()));
                         let event = match execute_feature_command_with_origin(
-                            &app,
-                            command,
-                            origin,
-                            None,
+                            &app, command, origin, None,
                         ) {
                             Ok(result) => WebServerEvent::FeatureResult {
                                 request_id,

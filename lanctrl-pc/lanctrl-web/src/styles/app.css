@@ -403,6 +403,21 @@ p {
   gap: 16px;
 }
 
+.media-artwork {
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.media-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-title-block {
+  min-width: 0;
+}
+
 .media-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -417,6 +432,32 @@ p {
 .media-button.running {
   color: var(--primary);
   background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+.media-progress {
+  display: grid;
+  gap: 7px;
+}
+
+.media-progress-track {
+  height: 6px;
+  overflow: hidden;
+  background: var(--muted);
+  border-radius: 999px;
+}
+
+.media-progress-value {
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+}
+
+.media-time-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .volume-card input[type="range"] {

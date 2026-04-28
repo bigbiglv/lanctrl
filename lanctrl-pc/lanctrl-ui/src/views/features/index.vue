@@ -11,6 +11,7 @@ import MediaPlayerCard from './components/MediaPlayerCard.vue'
 import RangeCard from './components/RangeCard.vue'
 import type {
   ActionFeatureDefinition,
+  AppleMusicTrackInfo,
   FeatureCommand,
   FeatureDefinition,
   FeatureExecutionResult,
@@ -28,6 +29,7 @@ const loading = ref(true)
 const snapshotRefreshing = ref(false)
 const catalogRefreshing = ref(false)
 const activeFeatureKey = ref<string | null>(null)
+const appleMusicTrack = ref<AppleMusicTrackInfo | null>(null)
 
 const mockFeatureGroups: FeatureGroup[] = [
   {
@@ -94,6 +96,7 @@ async function loadPageData(options: { notify?: boolean } = {}) {
   if (!isTauri()) {
     groups.value = mockFeatureGroups
     currentVolume.value = 38
+    appleMusicTrack.value = null
     loading.value = false
     if (options.notify) {
       showAppNotice({ title: '刷新完成', message: '演示数据已刷新' })
@@ -116,6 +119,7 @@ async function loadPageData(options: { notify?: boolean } = {}) {
 
     groups.value = featureGroups
     currentVolume.value = snapshot.volumeLevel
+    appleMusicTrack.value = snapshot.appleMusicTrack
     if (options.notify) {
       showAppNotice({ title: '刷新完成', message: '状态已更新' })
     }
@@ -147,6 +151,7 @@ async function refreshSnapshot() {
   try {
     const snapshot = await invoke<FeatureSnapshot>('get_feature_snapshot')
     currentVolume.value = snapshot.volumeLevel
+    appleMusicTrack.value = snapshot.appleMusicTrack
     showAppNotice({ title: '刷新完成', message: `当前音量 ${snapshot.volumeLevel}%` })
   } catch (error) {
     showAppNotice({
@@ -183,6 +188,7 @@ async function runCommand(feature: FeatureDefinition, command: FeatureCommand) {
     }
 
     if (typeof result.appleMusicRunning === 'boolean') {
+      appleMusicTrack.value = result.appleMusicTrack
       await loadPageData()
     }
 
@@ -330,6 +336,7 @@ onMounted(loadPageData)
               v-for="feature in mediaPlayerFeatures"
               :key="feature.featureKey"
               :feature="feature"
+              :track="appleMusicTrack"
               :pending-key="activeFeatureKey"
               :refreshing="catalogRefreshing"
               @execute="handleMediaAction"

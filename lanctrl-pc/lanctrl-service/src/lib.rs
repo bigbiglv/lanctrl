@@ -62,6 +62,19 @@ pub struct FeatureSnapshot {
     pub volume_level: u8,
     pub apple_music_running: bool,
     pub apple_music_playback_state: String,
+    pub apple_music_track: Option<AppleMusicTrackSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppleMusicTrackSnapshot {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub artwork_data_url: Option<String>,
+    pub position_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +99,7 @@ pub struct FeatureExecutionResult {
     pub volume_level: Option<u8>,
     pub apple_music_running: Option<bool>,
     pub apple_music_playback_state: Option<String>,
+    pub apple_music_track: Option<AppleMusicTrackSnapshot>,
 }
 
 #[derive(Debug)]
@@ -248,9 +262,8 @@ pub fn get_feature_snapshot() -> Result<FeatureSnapshot, FeatureServiceError> {
     Ok(FeatureSnapshot {
         volume_level: system::get_system_volume()?,
         apple_music_running: media::is_apple_music_running(),
-        apple_music_playback_state: media::get_apple_music_playback_state()
-            .as_str()
-            .into(),
+        apple_music_playback_state: media::get_apple_music_playback_state().as_str().into(),
+        apple_music_track: media::get_apple_music_track_info().map(AppleMusicTrackSnapshot::from),
     })
 }
 
@@ -260,21 +273,19 @@ pub fn execute_feature_command(
     match command {
         FeatureCommand::Shutdown => {
             system::shutdown()?;
-            Ok(feature_result("shutdown", "关机指令已发送。", None))
+            Ok(feature_result("shutdown", "关机指令已发送", None))
         }
         FeatureCommand::Restart => {
             system::restart()?;
-            Ok(feature_result("restart", "重启指令已发送。", None))
+            Ok(feature_result("restart", "重启指令已发送", None))
         }
-        FeatureCommand::TestNotification => Ok(feature_result(
-            "test_notification",
-            "测试提示已触发。",
-            None,
-        )),
+        FeatureCommand::TestNotification => {
+            Ok(feature_result("test_notification", "测试提示已触发", None))
+        }
         FeatureCommand::ErrorTest => {
             std::thread::sleep(std::time::Duration::from_secs(3));
             Err(FeatureServiceError::new(
-                "错误测试提示：PC 端执行 3 秒后返回测试错误。",
+                "错误测试提示：PC 端执行 3 秒后返回测试错误",
             ))
         }
         FeatureCommand::Volume { level } => {
@@ -318,16 +329,35 @@ fn feature_result(
         volume_level,
         apple_music_running: None,
         apple_music_playback_state: None,
+        apple_music_track: None,
     }
 }
 
-fn apple_music_result(feature_key: impl Into<String>, message: impl Into<String>) -> FeatureExecutionResult {
+fn apple_music_result(
+    feature_key: impl Into<String>,
+    message: impl Into<String>,
+) -> FeatureExecutionResult {
     FeatureExecutionResult {
         feature_key: feature_key.into(),
         message: message.into(),
         volume_level: None,
         apple_music_running: Some(media::is_apple_music_running()),
         apple_music_playback_state: Some(media::get_apple_music_playback_state().as_str().into()),
+        apple_music_track: media::get_apple_music_track_info().map(AppleMusicTrackSnapshot::from),
+    }
+}
+
+impl From<media::AppleMusicTrackInfo> for AppleMusicTrackSnapshot {
+    fn from(value: media::AppleMusicTrackInfo) -> Self {
+        Self {
+            title: value.title,
+            artist: value.artist,
+            album: value.album,
+            album_artist: value.album_artist,
+            artwork_data_url: value.artwork_data_url,
+            position_ms: value.position_ms,
+            duration_ms: value.duration_ms,
+        }
     }
 }
 

@@ -167,6 +167,7 @@ export function useWebConsole() {
           volumeLevel: payload.result.volumeLevel,
           appleMusicRunning: snapshot.value?.appleMusicRunning ?? false,
           appleMusicPlaybackState: snapshot.value?.appleMusicPlaybackState ?? "unavailable",
+          appleMusicTrack: snapshot.value?.appleMusicTrack ?? null,
         };
       }
       if (typeof payload.result?.appleMusicRunning === "boolean") {
@@ -174,6 +175,7 @@ export function useWebConsole() {
           volumeLevel: snapshot.value?.volumeLevel ?? taskVolume.value,
           appleMusicRunning: payload.result.appleMusicRunning,
           appleMusicPlaybackState: payload.result.appleMusicPlaybackState ?? snapshot.value?.appleMusicPlaybackState ?? "unavailable",
+          appleMusicTrack: payload.result.appleMusicTrack ?? snapshot.value?.appleMusicTrack ?? null,
         };
         await refreshState(true);
       }

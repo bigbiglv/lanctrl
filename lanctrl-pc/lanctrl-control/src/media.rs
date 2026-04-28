@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::process::Command;
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -9,9 +10,9 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 use windows::Media::Control::GlobalSystemMediaTransportControlsSession;
 #[cfg(target_os = "windows")]
-use windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
-#[cfg(target_os = "windows")]
 use windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
+#[cfg(target_os = "windows")]
+use windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
 const APPLE_MUSIC_PROCESS_NAME: &str = "AppleMusic";
 
@@ -51,6 +52,17 @@ pub enum AppleMusicPlaybackState {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct AppleMusicTrackInfo {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub artwork_data_url: Option<String>,
+    pub position_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
+}
+
 impl AppleMusicPlaybackState {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -59,6 +71,18 @@ impl AppleMusicPlaybackState {
             Self::Stopped => "stopped",
             Self::Unavailable => "unavailable",
         }
+    }
+}
+
+impl AppleMusicTrackInfo {
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.artist.is_none()
+            && self.album.is_none()
+            && self.album_artist.is_none()
+            && self.artwork_data_url.is_none()
+            && self.position_ms.is_none()
+            && self.duration_ms.is_none()
     }
 }
 
@@ -71,7 +95,13 @@ pub fn is_apple_music_running() -> bool {
         );
 
         Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &script,
+            ])
             .creation_flags(0x08000000)
             .status()
             .map(|status| status.success())
@@ -91,9 +121,9 @@ pub fn open_apple_music() -> Result<(), MediaControlError> {
         command.arg("shell:AppsFolder\\AppleInc.AppleMusicWin_nzyj5cx40ttqa!App");
         command.creation_flags(0x08000000);
 
-        let status = command
-            .status()
-            .map_err(|error| MediaControlError::CommandFailed(format!("打开 Apple Music 失败: {error}")))?;
+        let status = command.status().map_err(|error| {
+            MediaControlError::CommandFailed(format!("打开 Apple Music 失败: {error}"))
+        })?;
 
         if status.success() {
             wait_for_apple_music_running(Duration::from_secs(5));
@@ -199,8 +229,78 @@ pub fn get_apple_music_playback_state() -> AppleMusicPlaybackState {
     }
 }
 
+pub fn get_apple_music_track_info() -> Option<AppleMusicTrackInfo> {
+    #[cfg(target_os = "windows")]
+    {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sender.send(get_apple_music_track_info_inner());
+        });
+
+        receiver
+            .recv_timeout(Duration::from_millis(700))
+            .ok()
+            .flatten()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
 #[cfg(target_os = "windows")]
-fn find_apple_music_session() -> Result<GlobalSystemMediaTransportControlsSession, MediaControlError> {
+fn get_apple_music_track_info_inner() -> Option<AppleMusicTrackInfo> {
+    let session = find_apple_music_session().ok()?;
+    let mut info = AppleMusicTrackInfo::default();
+
+    if let Ok(properties) = session.TryGetMediaPropertiesAsync().and_then(|operation| {
+        operation
+            .get()
+            .map_err(|error| windows::core::Error::from(error))
+    }) {
+        info.title = optional_hstring(properties.Title().ok());
+        info.artist = optional_hstring(properties.Artist().ok());
+        info.album = optional_hstring(properties.AlbumTitle().ok());
+        info.album_artist = optional_hstring(properties.AlbumArtist().ok());
+    }
+
+    if let Ok(timeline) = session.GetTimelineProperties() {
+        info.position_ms = timespan_to_ms(timeline.Position().ok());
+        let start_ms = timespan_to_ms(timeline.StartTime().ok()).unwrap_or(0);
+        let end_ms = timespan_to_ms(timeline.EndTime().ok());
+        info.duration_ms = end_ms.and_then(|end| end.checked_sub(start_ms));
+    }
+
+    if info.is_empty() {
+        None
+    } else {
+        Some(info)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn optional_hstring(value: Option<windows::core::HSTRING>) -> Option<String> {
+    value
+        .map(|text| text.to_string())
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+#[cfg(target_os = "windows")]
+fn timespan_to_ms(value: Option<windows::Foundation::TimeSpan>) -> Option<u64> {
+    value.and_then(|span| {
+        if span.Duration < 0 {
+            None
+        } else {
+            Some((span.Duration as u64) / 10_000)
+        }
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn find_apple_music_session() -> Result<GlobalSystemMediaTransportControlsSession, MediaControlError>
+{
     let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
         .map_err(map_media_error)?
         .get()
