@@ -12,6 +12,30 @@ import type {
   WebStateResponse,
 } from "./types";
 
+function createRequestId() {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+    return [
+      hex.slice(0, 4).join(""),
+      hex.slice(4, 6).join(""),
+      hex.slice(6, 8).join(""),
+      hex.slice(8, 10).join(""),
+      hex.slice(10, 16).join(""),
+    ].join("-");
+  }
+
+  return `request-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 const statusLabels: Record<string, string> = {
   queued: "已排队",
   cancelled: "已停止",
@@ -77,7 +101,7 @@ export function useWebConsole() {
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => {
       toast.value = "";
-    }, 2600);
+    }, 3600);
   }
 
   function setConnection(status: ConnectionStatus, detail: string) {
@@ -105,7 +129,7 @@ export function useWebConsole() {
       return executeCommand(command);
     }
 
-    const requestId = crypto.randomUUID();
+    const requestId = createRequestId();
     return new Promise<FeatureExecuteResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         pendingCommands.delete(requestId);

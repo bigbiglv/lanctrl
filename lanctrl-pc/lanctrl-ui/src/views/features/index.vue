@@ -185,7 +185,11 @@ function buildActionCommand(feature: ActionFeatureDefinition): FeatureCommand {
     return { feature: 'test_notification' }
   }
 
-  return { feature: 'restart' }
+  if (feature.featureKey === 'error_test') {
+    return { feature: 'error_test' }
+  }
+
+  throw new Error(`未支持的操作指令：${feature.featureKey}`)
 }
 
 function handleTestAction() {
@@ -228,7 +232,11 @@ async function handleAction(feature: ActionFeatureDefinition) {
     }
   }
 
-  await runCommand(feature, buildActionCommand(feature))
+  try {
+    await runCommand(feature, buildActionCommand(feature))
+  } catch (error) {
+    feedback.value = String(error instanceof Error ? error.message : error)
+  }
 }
 
 function handleCancel(feature: ActionFeatureDefinition) {
@@ -251,7 +259,7 @@ onMounted(loadPageData)
 </script>
 
 <template>
-  <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
+  <section class="mx-auto flex w-full max-w-330 flex-col gap-6">
     <div
       v-if="feedback"
       class="rounded-[1.75rem] border border-border/70 bg-card/90 px-5 py-4 text-sm text-foreground"
@@ -292,7 +300,6 @@ onMounted(loadPageData)
                 @refresh="refreshSnapshot"
               />
             </template>
-            />
           </CardContent>
         </Card>
 

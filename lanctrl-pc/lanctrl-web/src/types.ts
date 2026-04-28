@@ -36,7 +36,7 @@ export interface FeatureSnapshot {
 }
 
 export type FeatureCommand =
-  | { feature: "shutdown" | "restart" | "test_notification" | string }
+  | { feature: "shutdown" | "restart" | "test_notification" | "error_test" | string }
   | { feature: "volume"; level: number };
 
 export interface TaskOrigin {
@@ -56,7 +56,7 @@ export interface ScheduledTask {
 }
 
 export interface TaskHistoryEntry {
-  taskId: string;
+  taskId?: string | null;
   title: string;
   status: string;
   detail?: string;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import {
+  AlertTriangle,
   Bell,
   CheckCircle2,
   Clock3,
@@ -17,8 +18,8 @@ import {
   Zap,
 } from "lucide-vue-next";
 import MorphIcon from "./MorphIcon.vue";
-import { useWebConsole } from "./useWebConsole";
 import { useTheme } from "./useTheme";
+import { useWebConsole } from "./useWebConsole";
 
 const {
   activeFeatureKey,
@@ -88,15 +89,10 @@ function iconForFeature(featureKey: string) {
   if (featureKey === "volume") {
     return Volume2;
   }
+  if (featureKey === "error_test") {
+    return AlertTriangle;
+  }
   return Bell;
-}
-
-function normalizeTaskTitle(title: string) {
-  return title
-    .replaceAll("瀹氭椂鍏虫満", "定时关机")
-    .replaceAll("瀹氭椂閲嶅惎", "定时重启")
-    .replaceAll("瀹氭椂娴嬭瘯鎻愮ず", "定时测试提示")
-    .replaceAll("瀹氭椂闊抽噺璋冩暣鍒?", "定时音量调整到 ");
 }
 </script>
 
@@ -242,7 +238,7 @@ function normalizeTaskTitle(title: string) {
         <div v-if="tasks.length" class="list-stack">
           <article v-for="task in tasks" :key="task.taskId" class="list-row">
             <div class="list-row-main">
-              <div class="list-row-title">{{ normalizeTaskTitle(task.title) }}</div>
+              <div class="list-row-title">{{ task.title }}</div>
               <div class="list-row-meta">
                 {{ formatDate(task.executeAtMs) }} · {{ countdownText(task.executeAtMs) }}
               </div>
@@ -266,13 +262,13 @@ function normalizeTaskTitle(title: string) {
         </div>
 
         <div v-if="visibleHistory.length" class="list-stack">
-          <article v-for="entry in visibleHistory" :key="`${entry.taskId}-${entry.recordedAtMs}`" class="list-row">
+          <article v-for="entry in visibleHistory" :key="`${entry.taskId ?? 'manual'}-${entry.recordedAtMs}`" class="list-row">
             <span class="status-badge" :class="entry.status">
               <CheckCircle2 class="badge-icon" />
               {{ statusLabels[entry.status] ?? entry.status }}
             </span>
             <div class="list-row-main">
-              <div class="list-row-title">{{ normalizeTaskTitle(entry.title) }}</div>
+              <div class="list-row-title">{{ entry.title }}</div>
               <div class="list-row-meta">{{ formatDate(entry.recordedAtMs) }} · {{ entry.origin?.clientName ?? "未知来源" }}</div>
               <div v-if="entry.detail" class="list-row-meta">{{ entry.detail }}</div>
             </div>

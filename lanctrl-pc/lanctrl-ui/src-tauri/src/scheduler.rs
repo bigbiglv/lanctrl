@@ -48,10 +48,7 @@ pub fn create_task(app: &AppHandle, task: ScheduledTask) -> ScheduledTask {
             task.title.clone(),
             task.origin.clone(),
             TaskHistoryStatus::Queued,
-            format!(
-                "宸插姞鍏ュ緟鎵ц鍒楄〃锛岄璁″湪 {} 鎵ц",
-                task.execute_at_ms
-            ),
+            format!("任务已创建，计划在 {} 执行", task.execute_at_ms),
         ));
     }
 
@@ -70,7 +67,7 @@ pub fn cancel_task(app: &AppHandle, task_id: &str) -> Option<ScheduledTask> {
             task.title.clone(),
             task.origin.clone(),
             TaskHistoryStatus::Cancelled,
-            "浠诲姟宸插彇娑堬紝涓嶄細缁х画鎵ц".to_string(),
+            "用户已停止该定时任务".to_string(),
         ));
         task
     };

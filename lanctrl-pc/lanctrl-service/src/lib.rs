@@ -58,6 +58,7 @@ pub enum FeatureCommand {
     Shutdown,
     Restart,
     TestNotification,
+    ErrorTest,
     Volume { level: u8 },
 }
 
@@ -136,6 +137,17 @@ pub fn get_feature_groups() -> Vec<FeatureGroup> {
                         confirm_required: false,
                     },
                 },
+                FeatureDefinition {
+                    feature_key: "error_test".into(),
+                    title: "错误测试提示".into(),
+                    description: "3 秒后返回测试错误，用于查看 Web 错误提示和失败历史。".into(),
+                    mobile_ready: true,
+                    control: FeatureControl::Action {
+                        button_text: "测试报错".into(),
+                        tone: FeatureTone::Primary,
+                        confirm_required: false,
+                    },
+                },
             ],
         },
         FeatureGroup {
@@ -190,6 +202,12 @@ pub fn execute_feature_command(
             message: "测试提示已触发。".into(),
             volume_level: None,
         }),
+        FeatureCommand::ErrorTest => {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            Err(FeatureServiceError::new(
+                "错误测试提示：PC 端执行 3 秒后返回测试错误。",
+            ))
+        }
         FeatureCommand::Volume { level } => {
             let applied_level = system::set_system_volume(level)?;
             Ok(FeatureExecutionResult {
@@ -217,6 +235,7 @@ mod tests {
         assert!(feature_keys.contains(&"shutdown"));
         assert!(feature_keys.contains(&"restart"));
         assert!(feature_keys.contains(&"test_notification"));
+        assert!(feature_keys.contains(&"error_test"));
         assert!(feature_keys.contains(&"volume"));
         assert!(groups
             .iter()

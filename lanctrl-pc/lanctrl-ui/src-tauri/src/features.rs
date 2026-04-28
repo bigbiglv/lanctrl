@@ -100,7 +100,8 @@ fn describe_command_title(command: &FeatureCommand) -> String {
     match command {
         FeatureCommand::Shutdown => "关机".into(),
         FeatureCommand::Restart => "重启".into(),
-        FeatureCommand::TestNotification => "测试通知".into(),
+        FeatureCommand::TestNotification => "测试提示".into(),
+        FeatureCommand::ErrorTest => "错误测试提示".into(),
         FeatureCommand::Volume { level } => format!("设置音量 {level}%"),
     }
 }
@@ -111,7 +112,7 @@ fn build_notice_payload(
 ) -> Option<FeatureNoticePayload> {
     match command {
         FeatureCommand::TestNotification => Some(FeatureNoticePayload {
-            title: "测试通知".into(),
+            title: "测试提示".into(),
             message: result.message.clone(),
             tone: "success".into(),
         }),

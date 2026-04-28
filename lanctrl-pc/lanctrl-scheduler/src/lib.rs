@@ -81,6 +81,7 @@ pub fn describe_command(command: &FeatureCommand) -> String {
         FeatureCommand::Shutdown => "定时关机".into(),
         FeatureCommand::Restart => "定时重启".into(),
         FeatureCommand::TestNotification => "定时测试提示".into(),
+        FeatureCommand::ErrorTest => "定时错误测试提示".into(),
         FeatureCommand::Volume { level } => format!("定时音量调整到 {level}%"),
     }
 }

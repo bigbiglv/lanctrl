@@ -44,6 +44,7 @@ export type FeatureCommand =
   | { feature: 'shutdown' }
   | { feature: 'restart' }
   | { feature: 'test_notification' }
+  | { feature: 'error_test' }
   | { feature: 'volume'; level: number }
 
 export interface FeatureExecutionResult {
