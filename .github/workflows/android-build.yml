@@ -9,15 +9,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    # 相比 mac，ubuntu 打包安卓更快且完全免费
+  changes:
     runs-on: ubuntu-latest
-    
+    outputs:
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Mobile Changes
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          if echo "$changed_files" | grep -Eq '^(lanctrl-mobile/|\.github/workflows/android-build\.yml$)'; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mobile=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-android:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    # 相比 macOS，Ubuntu 打包安卓更快且免费。
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 配置 Java 环境 (Android 构建需要)
+      # 配置 Java 环境，Android 构建需要。
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
@@ -34,12 +62,12 @@ jobs:
         run: flutter pub get
         working-directory: ./lanctrl-mobile
 
-      # 编译 Android 的 release 版本 APK
+      # 编译 Android release 版本 APK。
       - name: Build APK
         run: flutter build apk --release
         working-directory: ./lanctrl-mobile
 
-      # 上传 APK 附件
+      # 上传 APK 附件。
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -12,7 +12,35 @@ permissions:
   contents: write
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pc: ${{ steps.filter.outputs.pc }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PC Changes
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "pc=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          if echo "$changed_files" | grep -Eq '^(lanctrl-pc/|\.github/workflows/pc-build\.yml$)'; then
+            echo "pc=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pc=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-pc:
+    needs: changes
+    if: needs.changes.outputs.pc == 'true'
     runs-on: windows-latest
 
     steps:

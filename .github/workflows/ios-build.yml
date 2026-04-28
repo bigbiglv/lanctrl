@@ -1,17 +1,45 @@
 name: Build iOS Unsigned IPA
 
 on:
-  # 当提交代码到 main 或 master 分支，且是移动端相关代码改动时自动触发
+  # 移动端目录或当前 workflow 变更时自动触发。
   push:
     branches: [ "main", "master" ]
     paths:
       - 'lanctrl-mobile/**'
       - '.github/workflows/ios-build.yml'
-  # 允许在 GitHub 网页端手动点击按钮触发
+  # 允许在 GitHub 网页端手动触发。
   workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Mobile Changes
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          if echo "$changed_files" | grep -Eq '^(lanctrl-mobile/|\.github/workflows/ios-build\.yml$)'; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mobile=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-ios:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: macos-latest
 
     steps:
@@ -23,25 +51,25 @@ jobs:
         with:
           channel: 'stable'
           cache: true
-          
+
       - name: Install Dependencies
         run: flutter pub get
         working-directory: ./lanctrl-mobile
 
-      # 禁用签名直接构建 release 代码
+      # 禁用签名，直接构建 release 代码。
       - name: Build iOS App
         run: flutter build ios --release --no-codesign
         working-directory: ./lanctrl-mobile
 
-      # 在 mac 虚拟机中，把 .app 封装成 .ipa 文件
+      # 在 macOS 虚拟机中把 .app 封装成 .ipa 文件。
       - name: Package to IPA
         run: |
           cd lanctrl-mobile/build/ios/iphoneos
           mkdir Payload
           cp -r Runner.app Payload/
           zip -qr lanctrl-ios-unsigned.ipa Payload
-          
-      # 上传结果，方便在网页上下载
+
+      # 上传结果，方便在网页下载。
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
