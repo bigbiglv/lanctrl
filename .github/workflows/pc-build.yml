@@ -70,7 +70,7 @@ jobs:
         uses: microsoft/setup-msbuild@v1.1.3
 
       - name: Build and Publish Tauri Release
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
