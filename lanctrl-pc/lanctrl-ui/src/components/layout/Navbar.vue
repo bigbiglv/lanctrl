@@ -1,20 +1,23 @@
 <script setup lang="ts">
 import { mdiMoonWaningCrescent, mdiWeatherSunny } from '@mdi/js'
-import { Clock3, House, PanelsTopLeft, Settings, Smartphone, Sparkles } from 'lucide-vue-next'
-import { computed, ref, type ComponentPublicInstance } from 'vue'
+import { Clock3, Download, House, LoaderCircle, PanelsTopLeft, Settings, Smartphone, Sparkles } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, type ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
 import MorphIcon from '../common/MorphIcon.vue'
 import { Button } from '../ui/button/index'
 import SettingsOverlay from '../settings/SettingsOverlay.vue'
 import { useTheme } from '@/lib/theme.ts'
+import { useUpdater } from '@/composables/use-updater'
 
 defineOptions({ name: 'Navbar' })
 
 const route = useRoute()
 const { mode, toggleThemeMode } = useTheme()
+const { updateInfo, hasUpdate, installing, checkForUpdate, installUpdate } = useUpdater()
 const settingsButtonRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
 const settingsVisible = ref(false)
 const settingsSourceRect = ref<DOMRect | null>(null)
+let updateTimer: number | undefined
 
 const navigationItems = [
   { path: '/', label: '控制台', icon: House },
@@ -48,6 +51,19 @@ function openSettings() {
 function handleSettingsClosed() {
   settingsVisible.value = false
 }
+
+onMounted(() => {
+  void checkForUpdate()
+  updateTimer = window.setInterval(() => {
+    void checkForUpdate()
+  }, 30 * 60 * 1000)
+})
+
+onUnmounted(() => {
+  if (updateTimer !== undefined) {
+    window.clearInterval(updateTimer)
+  }
+})
 </script>
 
 <template>
@@ -71,7 +87,19 @@ function handleSettingsClosed() {
 
     </div>
     <div class="border border-(--app-nav-border) rounded-xl md:rounded-2xl bg-(--app-nav) backdrop-saturate-[1.8] backdrop-blur-[20px] shadow-(--app-shadow) p-2 md:py-2 md:px-2 flex items-center justify-end gap-3 min-w-0">
-
+      <Button
+          v-if="hasUpdate"
+          variant="outline"
+          size="icon"
+          class="rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,var(--card))] text-(--app-nav-foreground) border-[color-mix(in_oklab,var(--primary)_42%,var(--app-nav-border))] transition-all duration-200 hover:bg-[color-mix(in_oklab,var(--primary)_22%,var(--card))] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)] hover:-translate-y-[1px] hover:scale-[1.04] active:translate-y-0 active:scale-[0.92] disabled:pointer-events-none disabled:opacity-70"
+          :aria-label="`更新到 ${updateInfo?.version}`"
+          :title="`更新到 ${updateInfo?.version}`"
+          :disabled="installing"
+          @click="installUpdate"
+      >
+        <LoaderCircle v-if="installing" class="size-4 animate-spin" />
+        <Download v-else class="size-4" />
+      </Button>
       <Button
           variant="outline"
           size="icon"
