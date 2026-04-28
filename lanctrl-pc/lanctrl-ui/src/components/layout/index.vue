@@ -20,12 +20,12 @@ import Navbar from './Navbar.vue'
 .layout-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .layout-main {
   flex: 1;
-  overflow: visible;
+  overflow: auto;
   padding: 1.5rem 2rem 2rem;
 }
 

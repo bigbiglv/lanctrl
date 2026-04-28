@@ -273,17 +273,7 @@ onMounted(loadPageData)
     <template v-else>
       <section class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_420px]">
         <Card class="apple-section">
-          <CardHeader class="gap-3">
-            <Badge variant="outline" class="w-fit rounded-full">电源控制</Badge>
-            <div class="space-y-2">
-              <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-                即时操作
-              </CardTitle>
-              <CardDescription>
-                重要控制项集中展示，方便快速执行。
-              </CardDescription>
-            </div>
-          </CardHeader>
+
           <CardContent class="grid gap-4 md:grid-cols-2">
             <ActionCard
               v-for="feature in actionFeatures"
@@ -293,31 +283,24 @@ onMounted(loadPageData)
               @execute="handleAction"
               @cancel="handleCancel"
             />
-          </CardContent>
-        </Card>
 
-        <Card v-if="volumeFeature" class="apple-section">
-          <CardHeader class="gap-3">
-            <Badge variant="secondary" class="w-fit rounded-full">音量控制</Badge>
-            <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-              主音量
-            </CardTitle>
-            <CardDescription>
-              调整系统主输出音量，并可随时刷新当前状态。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RangeCard
-              :feature="volumeFeature"
-              :value="currentVolume"
-              :pending="activeFeatureKey === volumeFeature.featureKey"
-              :refreshing="snapshotRefreshing"
-              @update:value="currentVolume = $event"
-              @apply="handleVolumeApply"
-              @refresh="refreshSnapshot"
+            <template v-if="volumeFeature">
+
+              <RangeCard
+                :feature="volumeFeature"
+                :value="currentVolume"
+                :pending="activeFeatureKey === volumeFeature.featureKey"
+                :refreshing="snapshotRefreshing"
+                @update:value="currentVolume = $event"
+                @apply="handleVolumeApply"
+                @refresh="refreshSnapshot"
+              />
+            </template>
             />
           </CardContent>
         </Card>
+
+
       </section>
     </template>
   </section>

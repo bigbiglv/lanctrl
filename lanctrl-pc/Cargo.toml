@@ -12,3 +12,6 @@ members = [
     "lanctrl-common",
     "lanctrl-ui/src-tauri",
 ]
+
+[profile.dev]
+debug = 1

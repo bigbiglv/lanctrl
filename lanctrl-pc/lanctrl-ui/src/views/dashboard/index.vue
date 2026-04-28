@@ -6,7 +6,6 @@ import { Badge } from '../../components/ui/badge/index'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '../../components/ui/card/index'
@@ -73,19 +72,15 @@ onUnmounted(async () => {
 </script>
 
 <template>
-  <section class="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
+  <section class="flex w-full flex-col gap-6">
 
-    <section class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_420px]">
       <Card class="apple-section border-border/70 bg-card/95">
         <CardHeader class="gap-3">
-          <Badge variant="outline" class="w-fit rounded-full">设备概览</Badge>
           <div class="space-y-2">
-            <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
-              当前设备
+            <CardTitle class="font-(--font-display) text-3xl tracking-[-0.03em]">
+              外设
             </CardTitle>
-            <CardDescription class="max-w-2xl text-sm leading-6">
-              快速查看已识别的外设与当前状态，便于在操作前确认连接情况。
-            </CardDescription>
+
           </div>
         </CardHeader>
         <CardContent class="grid gap-4 md:grid-cols-2">
@@ -121,6 +116,5 @@ onUnmounted(async () => {
         </CardContent>
       </Card>
 
-    </section>
   </section>
 </template>

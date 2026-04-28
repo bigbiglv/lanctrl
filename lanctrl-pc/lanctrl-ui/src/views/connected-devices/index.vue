@@ -151,36 +151,30 @@ onUnmounted(() => {
 
 <template>
   <section class="mx-auto flex w-full max-w-[1320px] flex-col gap-6">
-    <section class="apple-section rounded-[2.5rem] px-8 py-10 lg:px-12">
-      <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div class="flex flex-wrap items-center gap-3">
-          <Button variant="outline" class="rounded-full" :disabled="mdnsPending" @click="toggleMdns">
-            <component :is="mdnsEnabled ? Wifi : WifiOff" class="size-4" />
-            {{ mdnsEnabled ? '关闭局域网发现' : '开启局域网发现' }}
-          </Button>
-          <Button variant="outline" class="rounded-full" @click="fetchClients">
-            <RefreshCw class="size-4" />
-            刷新设备
-          </Button>
-        </div>
-      </div>
-    </section>
+
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_340px]">
       <Card class="apple-section">
         <CardHeader class="gap-3">
-          <div class="flex flex-wrap items-center gap-3">
-            <Badge class="rounded-full">{{ clients.length }} 台设备</Badge>
-            <Badge variant="secondary" class="rounded-full">{{ onlineCount }} 台在线</Badge>
-            <Badge variant="outline" class="rounded-full">{{ connectedCount }} 台已连接</Badge>
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <Badge class="rounded-full">{{ clients.length }} 台设备</Badge>
+              <Badge variant="secondary" class="rounded-full">{{ onlineCount }} 台在线</Badge>
+              <Badge variant="outline" class="rounded-full">{{ connectedCount }} 台已连接</Badge>
+            </div>
+            <div class="flex items-center gap-3">
+              <Button variant="outline" class="rounded-full" :disabled="mdnsPending" @click="toggleMdns">
+                <component :is="mdnsEnabled ? Wifi : WifiOff" class="size-4" />
+              </Button>
+              <Button variant="outline" class="rounded-full" @click="fetchClients">
+                <RefreshCw class="size-4" />
+              </Button>
+            </div>
           </div>
           <div class="space-y-2">
             <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
               受信设备列表
             </CardTitle>
-            <CardDescription>
-              已连接表示当前存在有效 WebSocket 控制会话；在线表示最近仍有有效会话或心跳。
-            </CardDescription>
           </div>
         </CardHeader>
 
@@ -236,7 +230,6 @@ onUnmounted(() => {
                   @click="forgetDevice(client)"
                 >
                   <Unplug class="size-4" />
-                  移除设备
                 </Button>
               </div>
             </div>

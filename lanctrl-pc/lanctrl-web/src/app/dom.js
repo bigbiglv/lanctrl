@@ -6,7 +6,6 @@ export const elements = {
   taskVolume: document.querySelector("#taskVolume"),
   taskDelay: document.querySelector("#taskDelay"),
   taskForm: document.querySelector("#taskForm"),
-  presetList: document.querySelector("#presetList"),
   taskList: document.querySelector("#taskList"),
   taskCountText: document.querySelector("#taskCountText"),
   historyList: document.querySelector("#historyList"),

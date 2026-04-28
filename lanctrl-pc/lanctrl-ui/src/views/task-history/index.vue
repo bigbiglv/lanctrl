@@ -98,19 +98,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="mx-auto flex w-full max-w-[1240px] flex-col gap-6">
-
-    <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_360px]">
+  <section class="mx-auto flex w-full max-w-310 flex-col gap-6">
       <Card class="apple-section">
         <CardHeader class="gap-2">
-          <CardTitle class="font-[var(--font-display)] text-3xl tracking-[-0.03em]">
+          <CardTitle class="font-(--font-display) text-3xl tracking-[-0.03em]">
             最近记录
           </CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
           <div
             v-if="loading"
-            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+            class="rounded-3xl border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
           >
             正在读取任务记录…
           </div>
@@ -119,7 +117,7 @@ onUnmounted(() => {
             v-for="item in history"
             v-else
             :key="item.entryId"
-            class="rounded-[1.5rem] border border-border/70 bg-background/70 p-5"
+            class="rounded-3xl border border-border/70 bg-background/70 p-5"
           >
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div class="space-y-3">
@@ -147,13 +145,12 @@ onUnmounted(() => {
 
           <div
             v-if="!loading && history.length === 0"
-            class="rounded-[1.5rem] border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
+            class="rounded-3xl border border-dashed border-border/80 bg-muted/50 px-6 py-14 text-center text-sm text-muted-foreground"
           >
             还没有任何任务记录。
           </div>
         </CardContent>
       </Card>
 
-    </div>
   </section>
 </template>

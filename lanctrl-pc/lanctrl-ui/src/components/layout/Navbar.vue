@@ -51,8 +51,8 @@ function handleSettingsClosed() {
 </script>
 
 <template>
-  <header class="sticky top-6 z-20">
-    <div class="flex items-center justify-between gap-3 md:gap-6 border border-(--app-nav-border) rounded-3xl md:rounded-4xl bg-(--app-nav) backdrop-saturate-[1.8] backdrop-blur-[20px] shadow-[var(--app-shadow)] p-3 md:py-4 md:px-5">
+  <header class="flex items-center justify-around p-4 z-20">
+    <div class="flex items-center justify-between gap-3 md:gap-6 border border-(--app-nav-border) rounded-xl md:rounded-2xl bg-(--app-nav) backdrop-saturate-[1.8] backdrop-blur-[20px] shadow-(--app-shadow) p-2 md:py-2 md:px-2">
       <nav class="flex items-center justify-end md:justify-center gap-1 md:gap-2 min-w-0 flex-nowrap overflow-hidden">
         <router-link
           v-for="item in navigationItems"
@@ -68,30 +68,32 @@ function handleSettingsClosed() {
         </router-link>
       </nav>
 
-      <div class="flex items-center justify-end gap-3 min-w-0">
-        <Button
+
+    </div>
+    <div class="border border-(--app-nav-border) rounded-xl md:rounded-2xl bg-(--app-nav) backdrop-saturate-[1.8] backdrop-blur-[20px] shadow-(--app-shadow) p-2 md:py-2 md:px-2 flex items-center justify-end gap-3 min-w-0">
+
+      <Button
+          variant="outline"
+          size="icon"
+          class="rounded-full bg-[color-mix(in_oklab,var(--card)_88%,transparent)] transition-all duration-200 hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--app-nav-border))] hover:bg-[color-mix(in_oklab,var(--primary)_11%,var(--card))] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)] hover:text-[var(--app-nav-foreground)] hover:-translate-y-[1px] hover:scale-[1.04] active:translate-y-0 active:scale-[0.92]"
+          aria-label="模式切换"
+          @click="toggleThemeMode"
+      >
+        <MorphIcon :paths="themeIconPaths" :active-index="themeIconIndex" size="1rem" />
+      </Button>
+      <Button
           ref="settingsButtonRef"
           variant="outline"
           size="icon"
           class="rounded-full bg-[color-mix(in_oklab,var(--card)_88%,transparent)] transition-all duration-200 hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--app-nav-border))] hover:bg-[color-mix(in_oklab,var(--primary)_11%,var(--card))] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)] hover:text-[var(--app-nav-foreground)] hover:-translate-y-[1px] hover:scale-[1.04] active:translate-y-0 active:scale-[0.92] [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:rotate-[24deg]"
-          aria-label="打开设置"
+          aria-label="设置"
           @click="openSettings"
-        >
-          <Settings class="size-4" />
-        </Button>
+      >
+        <Settings class="size-4" />
+      </Button>
 
-        <Button
-          variant="outline"
-          size="icon"
-          class="rounded-full bg-[color-mix(in_oklab,var(--card)_88%,transparent)] transition-all duration-200 hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--app-nav-border))] hover:bg-[color-mix(in_oklab,var(--primary)_11%,var(--card))] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)] hover:text-[var(--app-nav-foreground)] hover:-translate-y-[1px] hover:scale-[1.04] active:translate-y-0 active:scale-[0.92]"
-          aria-label="切换深色模式"
-          @click="toggleThemeMode"
-        >
-          <MorphIcon :paths="themeIconPaths" :active-index="themeIconIndex" size="1rem" />
-        </Button>
-      </div>
+
     </div>
-
     <SettingsOverlay
       v-if="settingsVisible"
       :source-rect="settingsSourceRect"

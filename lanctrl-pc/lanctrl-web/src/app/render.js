@@ -141,9 +141,6 @@ export function renderTaskComposer() {
     { label: "1 分钟后测试提示", minutes: 1, feature: "test_notification" },
   ].filter((preset) => features.some((feature) => feature.featureKey === preset.feature));
 
-  elements.presetList.innerHTML = presets.map((preset) => (
-    `<button class="preset-chip" type="button" data-preset-feature="${preset.feature}" data-preset-minutes="${preset.minutes}">${preset.label}</button>`
-  )).join("");
 
   document.querySelectorAll("[data-preset-feature]").forEach((button) => {
     button.addEventListener("click", async () => {

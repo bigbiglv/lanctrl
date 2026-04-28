@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { ArrowLeft, Check, Minimize2, MonitorCog, Moon, Palette, ShieldCheck, Sun } from 'lucide-vue-next'
+import { ArrowLeft, Check, Minimize2, Moon, Palette, Sun } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Button } from '../ui/button/index'
@@ -227,109 +227,90 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="overlayRef" class="settings-overlay" aria-modal="true" role="dialog">
-    <div ref="contentRef" class="settings-page">
-      <header class="settings-header">
+  <section ref="overlayRef" class="fixed inset-0 z-70 overflow-hidden text-foreground bg-linear-to-br from-[color-mix(in_oklab,var(--background)_98%,var(--primary)_2%)] to-[color-mix(in_oklab,var(--card)_94%,var(--primary)_6%)] shadow-[0_24px_70px_rgba(15,23,42,0.24)] origin-top-left will-change-[transform,width,height,border-radius,opacity]" aria-modal="true" role="dialog">
+    <div ref="contentRef" class="flex w-screen h-screen min-w-[320px] flex-col overflow-hidden">
+      <header class="flex items-center gap-4 min-h-20 px-4 sm:px-8 py-5 border-b border-[color-mix(in_oklab,var(--border)_76%,transparent)] bg-[color-mix(in_oklab,var(--card)_78%,transparent)] backdrop-saturate-[180%] backdrop-blur-[20px]">
         <Button
           variant="ghost"
           size="icon"
-          class="settings-back-button"
+          class="rounded-full transition-all duration-180 ease-out hover:-translate-x-0.5 active:-translate-x-0.5 active:scale-[0.94]"
           aria-label="返回"
           @click="closeSettings"
         >
           <ArrowLeft class="size-5" />
         </Button>
 
-        <div class="settings-title">
-          <p>LanCtrl</p>
-          <h2>设置</h2>
+        <div>
+          <h2 class="font-display text-[1.35rem] font-semibold">设置</h2>
         </div>
       </header>
 
-      <main class="settings-content">
-        <section class="settings-hero">
-          <div class="settings-hero-icon">
-            <MonitorCog class="size-7" />
-          </div>
-          <div>
-            <p class="settings-kicker">Desktop Preferences</p>
-            <h3>桌面端偏好设置</h3>
-            <p>
-              管理当前电脑端的显示偏好与基础安全提示，保持控制台在不同使用环境下都清晰可读。
-            </p>
-          </div>
-        </section>
-
-        <section class="settings-grid">
-          <article class="settings-panel settings-panel-wide">
-            <div class="settings-panel-heading">
-              <span class="settings-panel-icon">
+      <main class="flex-1 overflow-y-auto p-4 sm:p-8">
+        <section class="max-w-260 mx-auto">
+          <article class="border border-[color-mix(in_oklab,var(--border)_70%,transparent)] rounded-3xl bg-[color-mix(in_oklab,var(--card)_88%,transparent)] p-5">
+            <div class="flex items-start gap-3.5">
+              <span class="inline-flex items-center justify-center shrink-0 w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-primary">
                 <Palette class="size-5" />
               </span>
               <div>
-                <h4>外观模式</h4>
-                <p>设置会立即保存到当前桌面端。</p>
+                <h4 class="font-display text-[1.08rem] font-semibold">外观</h4>
               </div>
             </div>
 
-            <div class="mode-options">
+            <div class="grid gap-3 mt-5">
               <button
                 v-for="option in modeOptions"
                 :key="option.value"
                 type="button"
-                class="mode-option"
-                :class="{ 'is-active': mode === option.value }"
+                class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3.5 w-full min-h-19 border rounded-2xl px-4 py-3.5 text-left transition-all duration-180 ease-out hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.99]"
+                :class="mode === option.value
+                  ? 'border-[color-mix(in_oklab,var(--primary)_58%,var(--border))] bg-[color-mix(in_oklab,var(--primary)_12%,var(--background))] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--primary)_28%,transparent)]'
+                  : 'border-[color-mix(in_oklab,var(--border)_82%,transparent)] bg-[color-mix(in_oklab,var(--background)_74%,transparent)] hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--border))] hover:bg-[color-mix(in_oklab,var(--primary)_7%,var(--background))]'"
                 @click="setThemeMode(option.value)"
               >
-                <span class="mode-option-icon">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[color-mix(in_oklab,var(--card)_82%,transparent)] text-foreground">
                   <component :is="option.icon" class="size-5" />
                 </span>
-                <span class="mode-option-copy">
-                  <strong>{{ option.label }}</strong>
-                  <span>{{ option.description }}</span>
+                <span class="grid gap-1 min-w-0">
+                  <strong class="text-[0.96rem] font-normal">{{ option.label }}</strong>
+                  <span class="text-muted-foreground text-[0.84rem] leading-relaxed">{{ option.description }}</span>
                 </span>
-                <Check v-if="mode === option.value" class="mode-option-check size-5" />
+                <Check v-if="mode === option.value" class="text-primary size-5" />
               </button>
             </div>
           </article>
-
-          <article class="settings-panel">
-            <div class="settings-panel-heading">
-              <span class="settings-panel-icon">
-                <ShieldCheck class="size-5" />
-              </span>
-              <div>
-                <h4>连接安全</h4>
-                <p>新的移动端配对请求会在桌面端弹出确认。</p>
-              </div>
-            </div>
-          </article>
-
-          <article class="settings-panel">
-            <div class="settings-panel-heading">
-              <span class="settings-panel-icon">
+        </section>
+        <section class="max-w-260 mx-auto mt-4">
+          <article class="border border-[color-mix(in_oklab,var(--border)_70%,transparent)] rounded-3xl bg-[color-mix(in_oklab,var(--card)_88%,transparent)] p-5">
+            <div class="flex items-start gap-3.5">
+              <span class="inline-flex items-center justify-center shrink-0 w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-primary">
                 <Minimize2 class="size-5" />
               </span>
               <div>
-                <h4>关闭按钮行为</h4>
-                <p>关闭主窗口时保留桌面端后台运行。</p>
+                <h4 class="font-display text-[1.08rem] font-semibold">关闭按钮</h4>
+                <p class="mt-1 text-muted-foreground text-sm leading-relaxed">关闭主窗口时保留桌面端后台运行。</p>
               </div>
             </div>
 
             <button
               type="button"
-              class="switch-setting"
+              class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 w-full min-h-18 mt-5 border rounded-2xl px-4 py-3.5 text-left transition-all duration-180 ease-out disabled:cursor-wait disabled:opacity-75 disabled:transform-none hover:-translate-y-[1px]"
+              :class="closeToTrayOnClose
+                ? 'border-[color-mix(in_oklab,var(--border)_82%,transparent)] bg-[color-mix(in_oklab,var(--background)_74%,transparent)]'
+                : 'border-[color-mix(in_oklab,var(--border)_82%,transparent)] bg-[color-mix(in_oklab,var(--background)_74%,transparent)] hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--border))] hover:bg-[color-mix(in_oklab,var(--primary)_7%,var(--background))]'"
               role="switch"
               :aria-checked="closeToTrayOnClose"
               :disabled="closeBehaviorPending"
               @click="toggleCloseBehavior"
             >
-              <span class="switch-setting-copy">
-                <strong>收起到右下角托盘</strong>
-                <span>{{ closeToTrayOnClose ? '已启用' : '已关闭' }}</span>
+              <span class="grid gap-1 min-w-0">
+                <strong class="text-[0.96rem] font-normal">收起到右下角托盘</strong>
+                <span class="text-muted-foreground text-[0.84rem]">{{ closeToTrayOnClose ? '已启用' : '已关闭' }}</span>
               </span>
-              <span class="switch-track" :class="{ 'is-active': closeToTrayOnClose }">
-                <span class="switch-thumb"></span>
+              <span class="relative w-[2.9rem] h-[1.6rem] shrink-0 rounded-full transition-colors duration-180 ease-out"
+                    :class="closeToTrayOnClose ? 'bg-[color-mix(in_oklab,var(--primary)_78%,var(--background))]' : 'bg-[color-mix(in_oklab,var(--muted-foreground)_28%,transparent)]'">
+                <span class="absolute top-[0.2rem] left-[0.2rem] w-[1.2rem] h-[1.2rem] rounded-full bg-background shadow-[0_4px_10px_rgba(15,23,42,0.2)] transition-transform duration-180 ease-out"
+                      :class="closeToTrayOnClose ? 'translate-x-[1.3rem]' : 'translate-x-0'"></span>
               </span>
             </button>
           </article>
@@ -338,331 +319,3 @@ onBeforeUnmount(() => {
     </div>
   </section>
 </template>
-
-<style scoped>
-.settings-overlay {
-  position: fixed;
-  inset: 0 auto auto 0;
-  z-index: 70;
-  overflow: hidden;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in oklab, var(--background) 98%, var(--primary) 2%),
-      color-mix(in oklab, var(--card) 94%, var(--primary) 6%)
-    );
-  color: var(--foreground);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
-  transform-origin: top left;
-  will-change: transform, width, height, border-radius, opacity;
-}
-
-.settings-page {
-  display: flex;
-  width: 100vw;
-  height: 100vh;
-  min-width: 320px;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-height: 5rem;
-  padding: 1.4rem 2rem;
-  border-bottom: 1px solid color-mix(in oklab, var(--border) 76%, transparent);
-  background: color-mix(in oklab, var(--card) 78%, transparent);
-  backdrop-filter: saturate(180%) blur(20px);
-}
-
-.settings-back-button {
-  border-radius: 999px;
-  transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
-}
-
-.settings-back-button:hover {
-  transform: translateX(-2px);
-}
-
-.settings-back-button:active {
-  transform: translateX(-2px) scale(0.94);
-}
-
-.settings-title p {
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.settings-title h2 {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 600;
-}
-
-.settings-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 2rem;
-}
-
-.settings-hero {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 1.25rem;
-  max-width: 1040px;
-  margin: 0 auto 1.5rem;
-  padding: 1.5rem;
-  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-  border-radius: 1.5rem;
-  background: color-mix(in oklab, var(--card) 88%, transparent);
-}
-
-.settings-hero-icon,
-.settings-panel-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--primary) 14%, transparent);
-  color: var(--primary);
-}
-
-.settings-hero-icon {
-  width: 3.25rem;
-  height: 3.25rem;
-}
-
-.settings-kicker {
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.settings-hero h3 {
-  margin-top: 0.2rem;
-  font-family: var(--font-display);
-  font-size: clamp(1.7rem, 4vw, 3rem);
-  font-weight: 650;
-  line-height: 1.08;
-}
-
-.settings-hero p:last-child {
-  max-width: 46rem;
-  margin-top: 0.65rem;
-  color: var(--muted-foreground);
-  line-height: 1.7;
-}
-
-.settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  gap: 1rem;
-  max-width: 1040px;
-  margin: 0 auto;
-}
-
-.settings-panel {
-  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-  border-radius: 1.5rem;
-  background: color-mix(in oklab, var(--card) 88%, transparent);
-  padding: 1.25rem;
-}
-
-.settings-panel-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.9rem;
-}
-
-.settings-panel-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex-shrink: 0;
-}
-
-.settings-panel h4 {
-  font-family: var(--font-display);
-  font-size: 1.08rem;
-  font-weight: 600;
-}
-
-.settings-panel p {
-  margin-top: 0.25rem;
-  color: var(--muted-foreground);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-.mode-options {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1.2rem;
-}
-
-.mode-option {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.85rem;
-  width: 100%;
-  min-height: 4.75rem;
-  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--background) 74%, transparent);
-  padding: 0.9rem 1rem;
-  text-align: left;
-  transition:
-    border-color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
-}
-
-.mode-option:hover {
-  border-color: color-mix(in oklab, var(--primary) 42%, var(--border));
-  background: color-mix(in oklab, var(--primary) 7%, var(--background));
-  transform: translateY(-1px);
-}
-
-.mode-option:active {
-  transform: translateY(0) scale(0.99);
-}
-
-.mode-option.is-active {
-  border-color: color-mix(in oklab, var(--primary) 58%, var(--border));
-  background: color-mix(in oklab, var(--primary) 12%, var(--background));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 28%, transparent);
-}
-
-.mode-option-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--card) 82%, transparent);
-  color: var(--foreground);
-}
-
-.mode-option-copy {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.mode-option-copy strong {
-  font-size: 0.96rem;
-}
-
-.mode-option-copy span {
-  color: var(--muted-foreground);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.mode-option-check {
-  color: var(--primary);
-}
-
-.switch-setting {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1rem;
-  width: 100%;
-  min-height: 4.5rem;
-  margin-top: 1.2rem;
-  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--background) 74%, transparent);
-  padding: 0.9rem 1rem;
-  text-align: left;
-  transition:
-    border-color 180ms ease,
-    background-color 180ms ease,
-    transform 180ms ease;
-}
-
-.switch-setting:hover {
-  border-color: color-mix(in oklab, var(--primary) 42%, var(--border));
-  background: color-mix(in oklab, var(--primary) 7%, var(--background));
-  transform: translateY(-1px);
-}
-
-.switch-setting:disabled {
-  cursor: wait;
-  opacity: 0.72;
-  transform: none;
-}
-
-.switch-setting-copy {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.switch-setting-copy strong {
-  font-size: 0.96rem;
-}
-
-.switch-setting-copy span {
-  color: var(--muted-foreground);
-  font-size: 0.84rem;
-}
-
-.switch-track {
-  position: relative;
-  width: 2.9rem;
-  height: 1.6rem;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--muted-foreground) 28%, transparent);
-  transition: background-color 180ms ease;
-}
-
-.switch-track.is-active {
-  background: color-mix(in oklab, var(--primary) 78%, var(--background));
-}
-
-.switch-thumb {
-  position: absolute;
-  top: 0.2rem;
-  left: 0.2rem;
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 999px;
-  background: var(--background);
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
-  transition: transform 180ms ease;
-}
-
-.switch-track.is-active .switch-thumb {
-  transform: translateX(1.3rem);
-}
-
-@media (max-width: 860px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .settings-header,
-  .settings-content {
-    padding-inline: 1rem;
-  }
-
-  .settings-hero {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
