@@ -7,6 +7,7 @@ use lanctrl_service::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::network::server::broadcast_web_state_sync;
 use crate::store::{TaskHistoryEntry, TaskHistoryStatus, GLOBAL_STORE};
 
 #[derive(Clone, Serialize)]
@@ -69,6 +70,8 @@ pub fn execute_feature_command_with_origin(
             app,
         );
     }
+
+    broadcast_web_state_sync();
 
     Ok(result)
 }

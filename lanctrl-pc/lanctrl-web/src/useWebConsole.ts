@@ -3,6 +3,7 @@ import { cancelScheduledTask, createScheduledTask, executeCommand, fetchState } 
 import type {
   ConnectionStatus,
   FeatureCommand,
+  FeatureExecuteResponse,
   FeatureDefinition,
   FeatureGroup,
   FeatureSnapshot,
@@ -41,6 +42,11 @@ export function useWebConsole() {
   let heartbeatTimer = 0;
   let clockTimer = 0;
   let socket: WebSocket | null = null;
+  const pendingCommands = new Map<string, {
+    resolve: (payload: FeatureExecuteResponse) => void;
+    reject: (error: Error) => void;
+    timer: number;
+  }>();
 
   const allFeatures = computed(() => groups.value.flatMap((group) => group.features));
   const actionFeatures = computed(() => allFeatures.value.filter((feature) => feature.control.type === "action"));
@@ -94,6 +100,27 @@ export function useWebConsole() {
     }
   }
 
+  function sendFeatureCommand(command: FeatureCommand) {
+    if (socket?.readyState !== WebSocket.OPEN) {
+      return executeCommand(command);
+    }
+
+    const requestId = crypto.randomUUID();
+    return new Promise<FeatureExecuteResponse>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        pendingCommands.delete(requestId);
+        reject(new Error("WebSocket 执行超时"));
+      }, 8000);
+
+      pendingCommands.set(requestId, { resolve, reject, timer });
+      socket?.send(JSON.stringify({
+        type: "execute_feature",
+        request_id: requestId,
+        ...command,
+      }));
+    });
+  }
+
   async function runFeature(feature: FeatureDefinition, level?: number) {
     if (feature.control.type === "action" && feature.control.confirmRequired) {
       const confirmed = window.confirm(`确认执行“${feature.title}”？\n${feature.description}`);
@@ -104,7 +131,7 @@ export function useWebConsole() {
 
     activeFeatureKey.value = feature.featureKey;
     try {
-      const payload = await executeCommand(commandForFeature(feature, level));
+      const payload = await sendFeatureCommand(commandForFeature(feature, level));
       if (!payload.success) {
         throw new Error(payload.msg || "执行失败");
       }
@@ -177,11 +204,29 @@ export function useWebConsole() {
       if (payload.type === "state_sync") {
         applyState(payload as WebStateResponse);
       }
+      if (payload.type === "feature_result") {
+        const pending = pendingCommands.get(payload.request_id);
+        if (!pending) {
+          return;
+        }
+        window.clearTimeout(pending.timer);
+        pendingCommands.delete(payload.request_id);
+        pending.resolve({
+          success: payload.success,
+          msg: payload.msg,
+          result: payload.result ?? null,
+        });
+      }
     });
 
     socket.addEventListener("close", () => {
       setConnection("offline", "3 秒后自动重连");
       window.clearInterval(heartbeatTimer);
+      pendingCommands.forEach((pending) => {
+        window.clearTimeout(pending.timer);
+        pending.reject(new Error("WebSocket 已断开"));
+      });
+      pendingCommands.clear();
       reconnectTimer = window.setTimeout(connectWebSocket, 3000);
     });
 

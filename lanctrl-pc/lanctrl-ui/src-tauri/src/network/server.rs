@@ -145,6 +145,12 @@ enum WebServerEvent {
         tasks: Vec<ScheduledTask>,
         history: Vec<TaskHistoryEntry>,
     },
+    FeatureResult {
+        request_id: String,
+        success: bool,
+        msg: String,
+        result: Option<FeatureExecutionResult>,
+    },
     Pong,
 }
 
@@ -153,6 +159,11 @@ enum WebServerEvent {
 enum WebClientEvent {
     Heartbeat,
     RequestStateSync,
+    ExecuteFeature {
+        request_id: String,
+        #[serde(flatten)]
+        command: FeatureCommand,
+    },
     Disconnect,
 }
 
@@ -772,17 +783,18 @@ async fn handle_ws_session(
 
 async fn web_ws(
     ws: WebSocketUpgrade,
+    State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     if let Some(response) = reject_non_lan(&addr) {
         return response.into_response();
     }
 
-    ws.on_upgrade(move |socket| handle_web_ws(socket, addr))
+    ws.on_upgrade(move |socket| handle_web_ws(state.tauri_app, socket, addr))
         .into_response()
 }
 
-async fn handle_web_ws(socket: WebSocket, addr: SocketAddr) {
+async fn handle_web_ws(app: AppHandle, socket: WebSocket, addr: SocketAddr) {
     let connection_id = Uuid::new_v4().to_string();
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<WebServerEvent>();
@@ -832,6 +844,33 @@ async fn handle_web_ws(socket: WebSocket, addr: SocketAddr) {
                         let _ = out_tx.send(WebServerEvent::Pong);
                     }
                     WebClientEvent::RequestStateSync => {
+                        let _ = out_tx.send(web_state_event());
+                    }
+                    WebClientEvent::ExecuteFeature {
+                        request_id,
+                        command,
+                    } => {
+                        let origin = TaskOrigin::web(format!("Web 鎺у埗鍙?{}", addr.ip()));
+                        let event = match execute_feature_command_with_origin(
+                            &app,
+                            command,
+                            origin,
+                            None,
+                        ) {
+                            Ok(result) => WebServerEvent::FeatureResult {
+                                request_id,
+                                success: true,
+                                msg: result.message.clone(),
+                                result: Some(result),
+                            },
+                            Err(error) => WebServerEvent::FeatureResult {
+                                request_id,
+                                success: false,
+                                msg: error.to_string(),
+                                result: None,
+                            },
+                        };
+                        let _ = out_tx.send(event);
                         let _ = out_tx.send(web_state_event());
                     }
                     WebClientEvent::Disconnect => break,

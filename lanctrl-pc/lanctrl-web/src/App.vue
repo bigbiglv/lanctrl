@@ -14,10 +14,9 @@ import {
   Square,
   Sun,
   Volume2,
-  Wifi,
-  WifiOff,
   Zap,
 } from "lucide-vue-next";
+import MorphIcon from "./MorphIcon.vue";
 import { useWebConsole } from "./useWebConsole";
 import { useTheme } from "./useTheme";
 
@@ -53,14 +52,30 @@ const navItems = [
   { key: "history", label: "历史", icon: History },
 ] as const;
 
-const connectionText = computed(() => {
+const syncIconPaths = [
+  "M12 20.5c-.8 0-1.45-.65-1.45-1.45S11.2 17.6 12 17.6s1.45.65 1.45 1.45-.65 1.45-1.45 1.45Zm-4.18-4.02a1.1 1.1 0 0 1-.78-1.88 7.02 7.02 0 0 1 9.92 0 1.1 1.1 0 0 1-1.56 1.56 4.8 4.8 0 0 0-6.8 0 1.1 1.1 0 0 1-.78.32Zm-3.22-3.2a1.1 1.1 0 0 1-.78-1.88 11.58 11.58 0 0 1 16.36 0 1.1 1.1 0 0 1-1.56 1.56 9.36 9.36 0 0 0-13.24 0 1.1 1.1 0 0 1-.78.32Zm-3.18-3.18a1.1 1.1 0 0 1-.78-1.88 16.06 16.06 0 0 1 22.72 0 1.1 1.1 0 0 1-1.56 1.56 13.84 13.84 0 0 0-19.6 0 1.1 1.1 0 0 1-.78.32Z",
+  "M12 21c-1.05 0-1.9-.85-1.9-1.9s.85-1.9 1.9-1.9 1.9.85 1.9 1.9S13.05 21 12 21Zm-6.4-2.32a1.15 1.15 0 0 1-.82-1.96L16.72 4.78a1.15 1.15 0 0 1 1.62 1.62L6.4 18.34a1.15 1.15 0 0 1-.8.34Zm2.1-4.5a1.15 1.15 0 0 1-.82-1.96 7.24 7.24 0 0 1 5.76-2.1l-2.22 2.22c-.7.2-1.35.58-1.9 1.13a1.15 1.15 0 0 1-.82.71Zm10.1.12c-.3 0-.6-.12-.82-.34a6.88 6.88 0 0 0-1.84-1.28l1.72-1.72c.62.34 1.2.76 1.76 1.26a1.15 1.15 0 0 1-.82 1.96v.12Zm-13.25-3.28a1.15 1.15 0 0 1-.82-1.96 11.7 11.7 0 0 1 12.18-2.72l-1.86 1.86a9.36 9.36 0 0 0-8.68 2.48 1.15 1.15 0 0 1-.82.34Zm16.2.1c-.3 0-.6-.12-.82-.34a9.5 9.5 0 0 0-1.26-1.08l1.64-1.64c.43.3.84.62 1.24.98a1.15 1.15 0 0 1-.8 1.98Z",
+  "M12 20.6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm-4.42-4.34a1.12 1.12 0 0 1-.8-1.9 7.38 7.38 0 0 1 10.44 0 1.12 1.12 0 0 1-1.58 1.58 5.14 5.14 0 0 0-7.28 0c-.22.22-.5.32-.78.32Zm-3.38-3.38a1.12 1.12 0 0 1-.8-1.9 12.18 12.18 0 0 1 17.2 0 1.12 1.12 0 0 1-1.58 1.58 9.94 9.94 0 0 0-14.04 0c-.22.22-.5.32-.78.32Zm16.7-6.08h-2.3V4.5a1.1 1.1 0 0 1 2.2 0v2.3h.1Zm0 4.8h-2.3V9.3h2.3v2.3Zm-4.8-4.8h-2.3V4.5a1.1 1.1 0 0 1 2.2 0v2.3h.1Zm0 4.8h-2.3V9.3h2.3v2.3Z",
+];
+
+const connectionStatusIndex = computed(() => {
   if (connectionStatus.value === "connected") {
-    return "实时同步中";
+    return 0;
   }
   if (connectionStatus.value === "offline") {
-    return "连接断开";
+    return 1;
   }
-  return "正在连接";
+  return 2;
+});
+
+const connectionAriaLabel = computed(() => {
+  if (connectionStatus.value === "connected") {
+    return `实时同步已连接，${connectionDetail.value}`;
+  }
+  if (connectionStatus.value === "offline") {
+    return `实时同步已断开，${connectionDetail.value}`;
+  }
+  return `实时同步连接中，${connectionDetail.value}`;
 });
 
 function iconForFeature(featureKey: string) {
@@ -88,12 +103,17 @@ function normalizeTaskTitle(title: string) {
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <div class="connection-card" aria-live="polite">
-        <component :is="connectionStatus === 'connected' ? Wifi : WifiOff" class="connection-icon" :class="connectionStatus" />
-        <div>
-          <strong>{{ connectionText }}</strong>
-          <span>{{ connectionDetail }}</span>
-        </div>
+      <div class="connection-card" :class="connectionStatus" :aria-label="connectionAriaLabel" aria-live="polite">
+        <MorphIcon
+          class="connection-icon"
+          :class="connectionStatus"
+          :paths="syncIconPaths"
+          :active-index="connectionStatusIndex"
+          size="1.2rem"
+        />
+        <button class="icon-button connection-refresh" type="button" aria-label="刷新状态" @click="refreshState()">
+          <RefreshCw class="button-icon" />
+        </button>
       </div>
 
       <button class="icon-button nav-action" type="button" aria-label="切换主题" @click="toggleThemeMode">
@@ -123,9 +143,6 @@ function normalizeTaskTitle(title: string) {
           <div>
             <h2>即时操作</h2>
           </div>
-          <button class="icon-button" type="button" aria-label="刷新状态" @click="refreshState()">
-            <RefreshCw class="button-icon" />
-          </button>
         </div>
 
         <div v-if="actionFeatures.length" class="action-grid">
