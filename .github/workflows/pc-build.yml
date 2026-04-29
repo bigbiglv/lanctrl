@@ -80,7 +80,7 @@ jobs:
           tauriScript: pnpm tauri
           tagName: pc-v__VERSION__
           releaseName: LanCtrl PC v__VERSION__
-          releaseBody: PC 端自动更新发布。
+          releaseBody: PC updater release
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

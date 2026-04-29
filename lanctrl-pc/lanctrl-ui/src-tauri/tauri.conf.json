@@ -25,7 +25,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGQjAzRUVEMUNBMUU1OTQKUldTVTVhRWM3VDZ3SDR2end0Z0JhaWZlaVVEQi9RaVNhOVd0dTZJbnMxQ2NpWXJSNnZEWVJLSFIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI1OTRCMTg0QTE3QTYyQzYKUldUR1lucWhoTEdVSlZBdGZRQTl1OUg4RXI3OEVGWHdEcGsyMnhsUmZFUThLSHhWVmxOTkRhTHIK",
       "endpoints": [
         "https://github.com/bigbiglv/lanctrl/releases/latest/download/latest.json"
       ]
