@@ -112,6 +112,10 @@ function progressPercent(track: AppleMusicTrackInfo | null | undefined) {
   if (!track?.positionMs || !track.durationMs) return 0;
   return Math.min(100, Math.max(0, (track.positionMs / track.durationMs) * 100));
 }
+
+function sourceName(name: string | null | undefined) {
+  return (name || "未知来源").replace("Web 鎺у埗鍙?", "Web 控制台");
+}
 </script>
 
 <template>
@@ -309,7 +313,7 @@ function progressPercent(track: AppleMusicTrackInfo | null | undefined) {
             </span>
             <div class="list-row-main">
               <div class="list-row-title">{{ entry.title }}</div>
-              <div class="list-row-meta">{{ formatDate(entry.recordedAtMs) }} · {{ entry.origin?.clientName ?? "未知来源" }}</div>
+              <div class="list-row-meta">{{ formatDate(entry.recordedAtMs) }} · {{ sourceName(entry.origin?.clientName) }}</div>
               <div v-if="entry.detail" class="list-row-meta">{{ entry.detail }}</div>
             </div>
           </article>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, CircleSlash2, History, LaptopMinimal, Smartphone, TriangleAlert } from 'lucide-vue-next'
+import { CheckCircle2, CircleSlash2, Globe2, History, LaptopMinimal, Smartphone, TriangleAlert } from 'lucide-vue-next'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -13,7 +13,7 @@ import {
 } from '../../components/ui/card/index'
 
 interface TaskOrigin {
-  kind: 'pc' | 'mobile'
+  kind: 'pc' | 'mobile' | 'web'
   clientId?: string | null
   clientName: string
 }
@@ -61,11 +61,17 @@ function formatTime(timestamp: number) {
 }
 
 function sourceLabel(origin: TaskOrigin) {
-  return origin.kind === 'pc' ? 'PC 本机' : origin.clientName
+  if (origin.kind === 'pc')
+    return 'PC 本机'
+
+  // 兼容修复旧版本 WebSocket 写入过的乱码来源，新记录会直接保存 UTF-8 中文。
+  return origin.clientName.replace('Web 鎺у埗鍙?', 'Web 控制台')
 }
 
 function sourceIcon(origin: TaskOrigin) {
-  return origin.kind === 'pc' ? LaptopMinimal : Smartphone
+  if (origin.kind === 'pc')
+    return LaptopMinimal
+  return origin.kind === 'web' ? Globe2 : Smartphone
 }
 
 function statusMeta(status: TaskHistoryEntry['status']) {

@@ -1,4 +1,4 @@
-use lanctrl_scheduler::TaskOrigin;
+use lanctrl_scheduler::{TaskOrigin, TaskOriginKind};
 use lanctrl_service::{
     execute_feature_command as dispatch_feature_command, get_feature_groups as load_feature_groups,
     get_feature_snapshot as load_feature_snapshot, FeatureCommand, FeatureExecutionResult,
@@ -42,6 +42,12 @@ pub fn execute_feature_command_with_origin(
     origin: TaskOrigin,
     task_id: Option<String>,
 ) -> Result<FeatureExecutionResult, String> {
+    if task_id.is_none() {
+        if let Some(payload) = build_web_started_notice(&command, &origin) {
+            let _ = app.emit("feature_notice", payload);
+        }
+    }
+
     let result = dispatch_feature_command(command.clone()).map_err(|error| {
         if task_id.is_none() {
             record_feature_history(
@@ -122,4 +128,23 @@ fn build_notice_payload(
         }),
         _ => None,
     }
+}
+
+fn build_web_started_notice(
+    command: &FeatureCommand,
+    origin: &TaskOrigin,
+) -> Option<FeatureNoticePayload> {
+    if !matches!(origin.kind, TaskOriginKind::Web) {
+        return None;
+    }
+
+    Some(FeatureNoticePayload {
+        title: "Web 指令".into(),
+        message: format!(
+            "{} 发起了{}",
+            origin.client_name,
+            describe_command_title(command)
+        ),
+        tone: "warning".into(),
+    })
 }

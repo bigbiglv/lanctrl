@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { cancelScheduledTask, createScheduledTask, executeCommand, fetchState } from "./api";
+import { cancelScheduledTask, createScheduledTask, executeCommand, fetchState, getWebClientInfo } from "./api";
 import type {
   ConnectionStatus,
   FeatureCommand,
@@ -127,12 +127,13 @@ export function useWebConsole() {
     }
   }
 
-  function sendFeatureCommand(command: FeatureCommand) {
+  async function sendFeatureCommand(command: FeatureCommand) {
     if (socket?.readyState !== WebSocket.OPEN) {
       return executeCommand(command);
     }
 
     const requestId = createRequestId();
+    const clientInfo = await getWebClientInfo();
     return new Promise<FeatureExecuteResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         pendingCommands.delete(requestId);
@@ -143,6 +144,7 @@ export function useWebConsole() {
       socket?.send(JSON.stringify({
         type: "execute_feature",
         request_id: requestId,
+        client_info: clientInfo,
         ...command,
       }));
     });
@@ -232,7 +234,9 @@ export function useWebConsole() {
 
     socket.addEventListener("open", () => {
       setConnection("connected", "已连接");
-      socket?.send(JSON.stringify({ type: "request_state_sync" }));
+      getWebClientInfo().then((clientInfo) => {
+        socket?.send(JSON.stringify({ type: "request_state_sync", client_info: clientInfo }));
+      });
       heartbeatTimer = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "heartbeat" }));

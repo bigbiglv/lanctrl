@@ -106,6 +106,17 @@ pub struct SessionEvent {
     pub client_name: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebClientInfo {
+    pub client_id: Option<String>,
+    pub device_name: Option<String>,
+    pub device_model: Option<String>,
+    pub platform: Option<String>,
+    pub browser: Option<String>,
+    pub user_agent: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct WsSessionQuery {
     client_id: String,
@@ -158,9 +169,14 @@ enum WebServerEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum WebClientEvent {
     Heartbeat,
-    RequestStateSync,
+    RequestStateSync {
+        #[serde(default)]
+        client_info: Option<WebClientInfo>,
+    },
     ExecuteFeature {
         request_id: String,
+        #[serde(default)]
+        client_info: Option<WebClientInfo>,
         #[serde(flatten)]
         command: FeatureCommand,
     },
@@ -238,6 +254,8 @@ pub struct TaskCreateResponse {
 
 #[derive(Deserialize)]
 pub struct WebFeatureExecuteRequest {
+    #[serde(default)]
+    pub client_info: Option<WebClientInfo>,
     #[serde(flatten)]
     pub command: FeatureCommand,
 }
@@ -245,12 +263,16 @@ pub struct WebFeatureExecuteRequest {
 #[derive(Deserialize)]
 pub struct WebTaskCreateRequest {
     pub execute_at_ms: u64,
+    #[serde(default)]
+    pub client_info: Option<WebClientInfo>,
     #[serde(flatten)]
     pub command: FeatureCommand,
 }
 
 #[derive(Deserialize)]
 pub struct WebTaskCancelRequest {
+    #[serde(default)]
+    pub client_info: Option<WebClientInfo>,
     pub task_id: String,
 }
 
@@ -395,6 +417,103 @@ fn get_client_name(client_id: &str) -> String {
         .get(client_id)
         .map(|client| client.client_name.clone())
         .unwrap_or_else(|| "未知设备".to_string())
+}
+
+fn clean_web_client_part(value: Option<&str>) -> Option<String> {
+    let cleaned = value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(64)
+        .collect::<String>();
+
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn fallback_browser_name(user_agent: Option<&str>) -> Option<String> {
+    let user_agent = user_agent?;
+    if user_agent.contains("Edg/") {
+        Some("Edge".into())
+    } else if user_agent.contains("Chrome/") || user_agent.contains("CriOS/") {
+        Some("Chrome".into())
+    } else if user_agent.contains("Firefox/") || user_agent.contains("FxiOS/") {
+        Some("Firefox".into())
+    } else if user_agent.contains("Safari/") {
+        Some("Safari".into())
+    } else {
+        None
+    }
+}
+
+fn fallback_platform_name(user_agent: Option<&str>) -> Option<String> {
+    let user_agent = user_agent?;
+    if user_agent.contains("iPhone") {
+        Some("iPhone".into())
+    } else if user_agent.contains("iPad") {
+        Some("iPad".into())
+    } else if user_agent.contains("Android") {
+        Some("Android".into())
+    } else if user_agent.contains("Windows") {
+        Some("Windows".into())
+    } else if user_agent.contains("Mac OS X") {
+        Some("macOS".into())
+    } else {
+        None
+    }
+}
+
+fn web_origin(addr: &SocketAddr, client_info: Option<&WebClientInfo>) -> TaskOrigin {
+    let client_id = client_info
+        .and_then(|info| clean_web_client_part(info.client_id.as_deref()))
+        .unwrap_or_else(|| format!("web-{}", addr.ip()));
+    let user_agent = client_info.and_then(|info| info.user_agent.as_deref());
+    let device_name =
+        client_info.and_then(|info| clean_web_client_part(info.device_name.as_deref()));
+    let device_model =
+        client_info.and_then(|info| clean_web_client_part(info.device_model.as_deref()));
+    let platform = client_info
+        .and_then(|info| clean_web_client_part(info.platform.as_deref()))
+        .or_else(|| fallback_platform_name(user_agent));
+    let browser = client_info
+        .and_then(|info| clean_web_client_part(info.browser.as_deref()))
+        .or_else(|| fallback_browser_name(user_agent));
+
+    let mut parts = Vec::new();
+    if let Some(value) = device_name.or(device_model) {
+        parts.push(value);
+    }
+    if let Some(value) = platform {
+        if !parts.iter().any(|part| part == &value) {
+            parts.push(value);
+        }
+    }
+    if let Some(value) = browser {
+        parts.push(value);
+    }
+
+    let client_name = if parts.is_empty() {
+        format!("Web 控制台 {}", addr.ip())
+    } else {
+        format!("{} · Web 控制台 {}", parts.join(" "), addr.ip())
+    };
+
+    TaskOrigin::web_client(client_id, client_name)
+}
+
+fn emit_web_notice(app: &AppHandle, origin: &TaskOrigin, message: String) {
+    let _ = app.emit(
+        "feature_notice",
+        serde_json::json!({
+            "title": "Web 指令",
+            "message": format!("{} {}", origin.client_name, message),
+            "tone": "warning",
+        }),
+    );
 }
 
 fn sync_client_state(
@@ -842,14 +961,16 @@ async fn handle_web_ws(app: AppHandle, socket: WebSocket, addr: SocketAddr) {
                     WebClientEvent::Heartbeat => {
                         let _ = out_tx.send(WebServerEvent::Pong);
                     }
-                    WebClientEvent::RequestStateSync => {
+                    WebClientEvent::RequestStateSync { client_info } => {
+                        let _ = web_origin(&addr, client_info.as_ref());
                         let _ = out_tx.send(web_state_event());
                     }
                     WebClientEvent::ExecuteFeature {
                         request_id,
+                        client_info,
                         command,
                     } => {
-                        let origin = TaskOrigin::web(format!("Web 鎺у埗鍙?{}", addr.ip()));
+                        let origin = web_origin(&addr, client_info.as_ref());
                         let event = match execute_feature_command_with_origin(
                             &app, command, origin, None,
                         ) {
@@ -1201,7 +1322,7 @@ async fn web_features_execute(
         });
     }
 
-    let origin = TaskOrigin::web(format!("Web 控制台 {}", addr.ip()));
+    let origin = web_origin(&addr, payload.client_info.as_ref());
     match execute_feature_command_with_origin(&state.tauri_app, payload.command, origin, None) {
         Ok(result) => {
             broadcast_web_state_sync();
@@ -1243,11 +1364,9 @@ async fn web_tasks_create(
         });
     }
 
-    let task = ScheduledTask::new(
-        payload.command,
-        payload.execute_at_ms,
-        TaskOrigin::web(format!("Web 控制台 {}", addr.ip())),
-    );
+    let origin = web_origin(&addr, payload.client_info.as_ref());
+    let task = ScheduledTask::new(payload.command, payload.execute_at_ms, origin.clone());
+    emit_web_notice(&state.tauri_app, &origin, format!("发起了{}", task.title));
     let created_task = scheduler::create_task(&state.tauri_app, task);
     broadcast_web_state_sync();
 
@@ -1271,9 +1390,11 @@ async fn web_tasks_cancel(
         });
     }
 
+    let origin = web_origin(&addr, payload.client_info.as_ref());
     let cancelled_task = scheduler::cancel_task(&state.tauri_app, &payload.task_id);
     match cancelled_task {
         Some(task) => {
+            emit_web_notice(&state.tauri_app, &origin, format!("停止了{}", task.title));
             broadcast_web_state_sync();
             Json(TaskCreateResponse {
                 success: true,

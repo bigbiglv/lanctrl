@@ -62,6 +62,15 @@ export type FeatureCommand =
   | { feature: "shutdown" | "restart" | "test_notification" | "error_test" | string }
   | { feature: "volume"; level: number };
 
+export interface WebClientInfo {
+  clientId: string;
+  deviceName?: string;
+  deviceModel?: string;
+  platform?: string;
+  browser?: string;
+  userAgent?: string;
+}
+
 export interface TaskOrigin {
   kind: "pc" | "mobile" | "web";
   clientId?: string;

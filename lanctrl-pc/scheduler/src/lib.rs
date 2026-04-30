@@ -42,6 +42,14 @@ impl TaskOrigin {
             client_name: client_name.into(),
         }
     }
+
+    pub fn web_client(client_id: impl Into<String>, client_name: impl Into<String>) -> Self {
+        Self {
+            kind: TaskOriginKind::Web,
+            client_id: Some(client_id.into()),
+            client_name: client_name.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
