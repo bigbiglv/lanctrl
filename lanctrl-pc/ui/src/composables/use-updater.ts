@@ -1,17 +1,45 @@
 import { relaunch } from '@tauri-apps/plugin-process'
-import { check, type Update } from '@tauri-apps/plugin-updater'
+import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater'
 import { computed, ref } from 'vue'
+import { showAppNotice } from './useNotice'
 
 const updateInfo = ref<Update | null>(null)
 const checking = ref(false)
+const downloading = ref(false)
 const installing = ref(false)
+const downloadedBytes = ref(0)
+const totalBytes = ref<number | null>(null)
 
 function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
+function shouldCheckForUpdate() {
+  // Tauri dev 模式也能调用 updater，需要显式跳过，避免开发版提示线上更新。
+  return isTauriRuntime() && !import.meta.env.DEV
+}
+
+function formatUpdateError(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function handleDownloadEvent(event: DownloadEvent) {
+  if (event.event === 'Started') {
+    downloadedBytes.value = 0
+    totalBytes.value = event.data.contentLength ?? null
+    return
+  }
+
+  if (event.event === 'Progress') {
+    downloadedBytes.value += event.data.chunkLength
+    return
+  }
+
+  downloading.value = false
+}
+
 async function checkForUpdate() {
-  if (!isTauriRuntime() || checking.value || installing.value) {
+  if (!shouldCheckForUpdate() || checking.value || installing.value) {
     return
   }
 
@@ -32,21 +60,54 @@ async function installUpdate() {
   }
 
   installing.value = true
+  downloading.value = true
+  downloadedBytes.value = 0
+  totalBytes.value = null
+
+  showAppNotice({
+    title: '开始更新',
+    message: `正在下载 ${updateInfo.value.version}`,
+  })
 
   try {
-    await updateInfo.value.downloadAndInstall()
+    await updateInfo.value.downloadAndInstall(handleDownloadEvent)
+
+    showAppNotice({
+      title: '更新完成',
+      message: '即将重启应用完成安装',
+    })
+
     await relaunch()
   } catch (error) {
     console.error('安装更新失败', error)
+    showAppNotice({
+      title: '更新失败',
+      message: formatUpdateError(error),
+      tone: 'warning',
+    })
+  } finally {
+    downloading.value = false
     installing.value = false
   }
 }
 
 export function useUpdater() {
+  const downloadProgress = computed(() => {
+    if (!totalBytes.value) {
+      return null
+    }
+
+    return Math.min(100, Math.round((downloadedBytes.value / totalBytes.value) * 100))
+  })
+
   return {
     updateInfo,
     checking,
+    downloading,
     installing,
+    downloadedBytes,
+    totalBytes,
+    downloadProgress,
     hasUpdate: computed(() => updateInfo.value !== null),
     checkForUpdate,
     installUpdate,

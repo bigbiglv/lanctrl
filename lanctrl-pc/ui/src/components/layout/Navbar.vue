@@ -13,7 +13,7 @@ defineOptions({ name: 'Navbar' })
 
 const route = useRoute()
 const { mode, toggleThemeMode } = useTheme()
-const { updateInfo, hasUpdate, installing, checkForUpdate, installUpdate } = useUpdater()
+const { updateInfo, hasUpdate, downloading, installing, downloadProgress, checkForUpdate, installUpdate } = useUpdater()
 const settingsButtonRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
 const settingsVisible = ref(false)
 const settingsSourceRect = ref<DOMRect | null>(null)
@@ -92,6 +92,7 @@ onUnmounted(() => {
           variant="outline"
           size="icon"
           class="rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,var(--card))] text-(--app-nav-foreground) border-[color-mix(in_oklab,var(--primary)_42%,var(--app-nav-border))] transition-all duration-200 hover:bg-[color-mix(in_oklab,var(--primary)_22%,var(--card))] hover:shadow-[0_10px_24px_rgba(15,23,42,0.12)] hover:-translate-y-[1px] hover:scale-[1.04] active:translate-y-0 active:scale-[0.92] disabled:pointer-events-none disabled:opacity-70"
+          :class="installing ? 'w-auto min-w-10 gap-1.5 px-3' : ''"
           :aria-label="`更新到 ${updateInfo?.version}`"
           :title="`更新到 ${updateInfo?.version}`"
           :disabled="installing"
@@ -99,6 +100,9 @@ onUnmounted(() => {
       >
         <LoaderCircle v-if="installing" class="size-4 animate-spin" />
         <Download v-else class="size-4" />
+        <span v-if="installing" class="text-xs font-medium tabular-nums">
+          {{ downloadProgress !== null ? `${downloadProgress}%` : (downloading ? '下载中' : '安装中') }}
+        </span>
       </Button>
       <Button
           variant="outline"
