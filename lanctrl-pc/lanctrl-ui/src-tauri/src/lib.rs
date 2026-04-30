@@ -11,21 +11,33 @@ use crate::network::server::{
 };
 use mdns_sd::ServiceDaemon;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::env;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tokio::time::MissedTickBehavior;
 
 const TRAY_MENU_SHOW: &str = "show";
 const TRAY_MENU_EXIT: &str = "exit";
+const STARTUP_ARG_HIDDEN: &str = "--lanctrl-startup-hidden";
+const STARTUP_REGISTRY_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const STARTUP_REGISTRY_VALUE: &str = "LanCtrl";
 
 #[derive(Default)]
 struct MdnsRuntime {
     daemon: Mutex<Option<ServiceDaemon>>,
+}
+
+#[derive(Default)]
+struct ExitState {
+    allowed: AtomicBool,
 }
 
 #[derive(Serialize)]
@@ -38,6 +50,12 @@ struct MdnsStatus {
 #[serde(rename_all = "camelCase")]
 struct CloseBehavior {
     close_to_tray_on_close: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupBehavior {
+    launch_on_startup: bool,
 }
 
 fn current_mdns_enabled() -> bool {
@@ -120,12 +138,115 @@ fn set_close_to_tray_on_close(enabled: bool) -> CloseBehavior {
     }
 }
 
-fn show_main_window(app: &AppHandle) {
+fn is_startup_hidden_launch() -> bool {
+    env::args_os().any(|arg| arg == STARTUP_ARG_HIDDEN)
+}
+
+#[cfg(target_os = "windows")]
+fn startup_command() -> Result<String, String> {
+    let exe_path = env::current_exe().map_err(|error| format!("读取程序路径失败: {error}"))?;
+    Ok(format!("\"{}\" {}", exe_path.display(), STARTUP_ARG_HIDDEN))
+}
+
+#[cfg(target_os = "windows")]
+fn is_launch_on_startup_enabled() -> Result<bool, String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let key = match hkcu.open_subkey(STARTUP_REGISTRY_KEY) {
+        Ok(key) => key,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(format!("读取自启设置失败: {error}")),
+    };
+    Ok(key.get_value::<String, _>(STARTUP_REGISTRY_VALUE).is_ok())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_launch_on_startup_enabled() -> Result<bool, String> {
+    Ok(false)
+}
+
+#[cfg(target_os = "windows")]
+fn set_launch_on_startup_enabled(enabled: bool) -> Result<(), String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let (key, _) = hkcu
+        .create_subkey(STARTUP_REGISTRY_KEY)
+        .map_err(|error| format!("打开自启设置失败: {error}"))?;
+
+    if enabled {
+        key.set_value(STARTUP_REGISTRY_VALUE, &startup_command()?)
+            .map_err(|error| format!("写入自启设置失败: {error}"))?;
+    } else {
+        match key.delete_value(STARTUP_REGISTRY_VALUE) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("关闭自启失败: {error}")),
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_launch_on_startup_enabled(_enabled: bool) -> Result<(), String> {
+    Err("开机自启当前仅支持 Windows 桌面端".into())
+}
+
+#[tauri::command]
+fn get_startup_behavior() -> Result<StartupBehavior, String> {
+    Ok(StartupBehavior {
+        launch_on_startup: is_launch_on_startup_enabled()?,
+    })
+}
+
+#[tauri::command]
+fn set_launch_on_startup(enabled: bool) -> Result<StartupBehavior, String> {
+    set_launch_on_startup_enabled(enabled)?;
+    Ok(StartupBehavior {
+        launch_on_startup: is_launch_on_startup_enabled()?,
+    })
+}
+
+fn show_existing_main_window(app: &AppHandle) -> bool {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        return true;
     }
+
+    false
+}
+
+fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
+    if show_existing_main_window(app) {
+        return Ok(());
+    }
+
+    // 托盘状态下销毁 WebView，重新打开时按需创建，避免隐藏页面继续运行前端脚本。
+    let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+        .title("LanCtrl")
+        .inner_size(800.0, 600.0)
+        .resizable(true)
+        .visible(true)
+        .build()?;
+    let _ = window.set_focus();
+    Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
+    if show_existing_main_window(app) {
+        return;
+    }
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let _ = create_main_window(&app);
+    });
 }
 
 fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
@@ -139,7 +260,12 @@ fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_MENU_SHOW => show_main_window(app),
-            TRAY_MENU_EXIT => app.exit(0),
+            TRAY_MENU_EXIT => {
+                app.state::<ExitState>()
+                    .allowed
+                    .store(true, Ordering::SeqCst);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| match event {
@@ -228,6 +354,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(peripherals::init_state())
         .manage(MdnsRuntime::default())
+        .manage(ExitState::default())
         .invoke_handler(tauri::generate_handler![
             peripherals::get_peripheral_devices,
             peripherals::start_device_watch,
@@ -243,6 +370,8 @@ pub fn run() {
             set_mdns_enabled,
             get_close_behavior,
             set_close_to_tray_on_close,
+            get_startup_behavior,
+            set_launch_on_startup,
             remove_paired_client,
             ping_mobile_device,
             notify_mobile_disconnect
@@ -263,6 +392,10 @@ pub fn run() {
             setup_system_tray(app)?;
 
             scheduler::init(&app.handle().clone());
+
+            if !is_startup_hidden_launch() {
+                create_main_window(app.handle())?;
+            }
 
             let (device_id, device_name, mdns_enabled) = {
                 let store = store::GLOBAL_STORE.lock().unwrap();
@@ -305,10 +438,30 @@ pub fn run() {
 
                 if close_to_tray_on_close {
                     api.prevent_close();
-                    let _ = window.hide();
+                    peripherals::stop_watcher(
+                        window
+                            .app_handle()
+                            .state::<peripherals::WatcherState>()
+                            .inner(),
+                    );
+                    let _ = window.destroy();
+                } else {
+                    window
+                        .app_handle()
+                        .state::<ExitState>()
+                        .allowed
+                        .store(true, Ordering::SeqCst);
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, .. } = event {
+                let allowed = app.state::<ExitState>().allowed.load(Ordering::SeqCst);
+                if !allowed {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

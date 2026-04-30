@@ -30,6 +30,10 @@ pub fn init_state() -> WatcherState {
     }
 }
 
+pub fn stop_watcher(state: &WatcherState) {
+    state.watching.store(false, Ordering::SeqCst);
+}
+
 fn fetch_devices() -> Result<Vec<PeripheralDevice>, String> {
     let mut cmd = Command::new("powershell");
 
@@ -98,6 +102,6 @@ pub async fn start_device_watch(
 #[tauri::command]
 pub async fn stop_device_watch(state: State<'_, WatcherState>) -> Result<(), String> {
     // Vue unmount triggered graceful loop kill switch
-    state.watching.store(false, Ordering::SeqCst);
+    stop_watcher(state.inner());
     Ok(())
 }

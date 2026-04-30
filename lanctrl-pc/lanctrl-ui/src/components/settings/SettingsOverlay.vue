@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { ArrowLeft, Check, Minimize2, Moon, Palette, Sun } from 'lucide-vue-next'
+import { ArrowLeft, Check, Minimize2, Moon, Palette, Power, Sun } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Button } from '../ui/button/index'
@@ -15,6 +15,10 @@ interface SourceRect {
 
 interface CloseBehavior {
   closeToTrayOnClose: boolean
+}
+
+interface StartupBehavior {
+  launchOnStartup: boolean
 }
 
 const props = defineProps<{
@@ -33,6 +37,8 @@ const closing = ref(false)
 const previousBodyOverflow = ref('')
 const closeToTrayOnClose = ref(true)
 const closeBehaviorPending = ref(false)
+const launchOnStartup = ref(false)
+const startupBehaviorPending = ref(false)
 
 const modeOptions = computed(() => [
   {
@@ -184,6 +190,15 @@ async function loadCloseBehavior() {
   closeToTrayOnClose.value = behavior.closeToTrayOnClose
 }
 
+async function loadStartupBehavior() {
+  if (!isTauri()) {
+    return
+  }
+
+  const behavior = await invoke<StartupBehavior>('get_startup_behavior')
+  launchOnStartup.value = behavior.launchOnStartup
+}
+
 async function toggleCloseBehavior() {
   if (closeBehaviorPending.value) {
     return
@@ -209,12 +224,37 @@ async function toggleCloseBehavior() {
   }
 }
 
+async function toggleStartupBehavior() {
+  if (startupBehaviorPending.value) {
+    return
+  }
+
+  const nextValue = !launchOnStartup.value
+  launchOnStartup.value = nextValue
+
+  if (!isTauri()) {
+    return
+  }
+
+  startupBehaviorPending.value = true
+  try {
+    const behavior = await invoke<StartupBehavior>('set_launch_on_startup', {
+      enabled: nextValue,
+    })
+    launchOnStartup.value = behavior.launchOnStartup
+  } catch {
+    launchOnStartup.value = !nextValue
+  } finally {
+    startupBehaviorPending.value = false
+  }
+}
+
 onMounted(async () => {
   previousBodyOverflow.value = document.body.style.overflow
   document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncOverlaySize)
-  await loadCloseBehavior()
+  await Promise.allSettled([loadCloseBehavior(), loadStartupBehavior()])
   await nextTick()
   animateOpen()
 })
@@ -311,6 +351,41 @@ onBeforeUnmount(() => {
                     :class="closeToTrayOnClose ? 'bg-[color-mix(in_oklab,var(--primary)_78%,var(--background))]' : 'bg-[color-mix(in_oklab,var(--muted-foreground)_28%,transparent)]'">
                 <span class="absolute top-[0.2rem] left-[0.2rem] w-[1.2rem] h-[1.2rem] rounded-full bg-background shadow-[0_4px_10px_rgba(15,23,42,0.2)] transition-transform duration-180 ease-out"
                       :class="closeToTrayOnClose ? 'translate-x-[1.3rem]' : 'translate-x-0'"></span>
+              </span>
+            </button>
+          </article>
+        </section>
+        <section class="max-w-260 mx-auto mt-4">
+          <article class="border border-[color-mix(in_oklab,var(--border)_70%,transparent)] rounded-3xl bg-[color-mix(in_oklab,var(--card)_88%,transparent)] p-5">
+            <div class="flex items-start gap-3.5">
+              <span class="inline-flex items-center justify-center shrink-0 w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-primary">
+                <Power class="size-5" />
+              </span>
+              <div>
+                <h4 class="font-display text-[1.08rem] font-semibold">开机自启</h4>
+                <p class="mt-1 text-muted-foreground text-sm leading-relaxed">登录 Windows 后自动启动后台服务，并保持在托盘。</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 w-full min-h-18 mt-5 border rounded-2xl px-4 py-3.5 text-left transition-all duration-180 ease-out disabled:cursor-wait disabled:opacity-75 disabled:transform-none hover:-translate-y-[1px]"
+              :class="launchOnStartup
+                ? 'border-[color-mix(in_oklab,var(--border)_82%,transparent)] bg-[color-mix(in_oklab,var(--background)_74%,transparent)]'
+                : 'border-[color-mix(in_oklab,var(--border)_82%,transparent)] bg-[color-mix(in_oklab,var(--background)_74%,transparent)] hover:border-[color-mix(in_oklab,var(--primary)_42%,var(--border))] hover:bg-[color-mix(in_oklab,var(--primary)_7%,var(--background))]'"
+              role="switch"
+              :aria-checked="launchOnStartup"
+              :disabled="startupBehaviorPending"
+              @click="toggleStartupBehavior"
+            >
+              <span class="grid gap-1 min-w-0">
+                <strong class="text-[0.96rem] font-normal">开机后后台运行</strong>
+                <span class="text-muted-foreground text-[0.84rem]">{{ launchOnStartup ? '已启用' : '已关闭' }}</span>
+              </span>
+              <span class="relative w-[2.9rem] h-[1.6rem] shrink-0 rounded-full transition-colors duration-180 ease-out"
+                    :class="launchOnStartup ? 'bg-[color-mix(in_oklab,var(--primary)_78%,var(--background))]' : 'bg-[color-mix(in_oklab,var(--muted-foreground)_28%,transparent)]'">
+                <span class="absolute top-[0.2rem] left-[0.2rem] w-[1.2rem] h-[1.2rem] rounded-full bg-background shadow-[0_4px_10px_rgba(15,23,42,0.2)] transition-transform duration-180 ease-out"
+                      :class="launchOnStartup ? 'translate-x-[1.3rem]' : 'translate-x-0'"></span>
               </span>
             </button>
           </article>
