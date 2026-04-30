@@ -61,6 +61,14 @@ jobs:
         run: pnpm install
         working-directory: ./lanctrl-pc/lanctrl-ui
 
+      - name: Set Tauri Version
+        shell: pwsh
+        run: |
+          $configPath = "lanctrl-pc/lanctrl-ui/src-tauri/tauri.conf.json"
+          $config = Get-Content -Raw $configPath | ConvertFrom-Json
+          $config.version = "0.1.${{ github.run_number }}"
+          $config | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $configPath
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
