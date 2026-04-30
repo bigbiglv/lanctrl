@@ -32,7 +32,7 @@ const emit = defineEmits<{
 }>()
 
 const { mode, setThemeMode } = useTheme()
-const { updateInfo, hasUpdate, checking, installing, downloadProgress, checkForUpdate, installUpdate } = useUpdater()
+const { updateInfo, hasUpdate, checking, downloading, installing, downloadProgress, checkForUpdate, installUpdate } = useUpdater()
 
 const overlayRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
@@ -61,7 +61,11 @@ const modeOptions = computed(() => [
 
 const updateStatusText = computed(() => {
   if (installing.value) {
-    return downloadProgress.value !== null ? `正在更新 ${downloadProgress.value}%` : '正在更新'
+    if (downloadProgress.value !== null) {
+      return `正在下载 ${downloadProgress.value}%`
+    }
+
+    return downloading.value ? '正在下载' : '正在安装'
   }
 
   if (hasUpdate.value) {
@@ -69,6 +73,18 @@ const updateStatusText = computed(() => {
   }
 
   return '当前版本'
+})
+
+const updateButtonText = computed(() => {
+  if (!installing.value) {
+    return '立即更新'
+  }
+
+  if (downloadProgress.value !== null) {
+    return `${downloadProgress.value}%`
+  }
+
+  return downloading.value ? '下载中' : '安装中'
 })
 
 const appVersionDisplay = computed(() => {
@@ -468,7 +484,7 @@ onBeforeUnmount(() => {
                 >
                   <LoaderCircle v-if="installing" class="size-4 animate-spin" />
                   <RefreshCw v-else class="size-4" />
-                  <span>{{ installing ? '更新中' : '立即更新' }}</span>
+                  <span>{{ updateButtonText }}</span>
                 </Button>
               </div>
             </div>

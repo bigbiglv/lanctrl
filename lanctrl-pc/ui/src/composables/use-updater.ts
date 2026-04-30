@@ -1,9 +1,9 @@
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater'
-import { computed, ref } from 'vue'
+import { computed, markRaw, ref, shallowRef } from 'vue'
 import { showAppNotice } from './useNotice'
 
-const updateInfo = ref<Update | null>(null)
+const updateInfo = shallowRef<Update | null>(null)
 const checking = ref(false)
 const downloading = ref(false)
 const installing = ref(false)
@@ -42,6 +42,12 @@ function handleDownloadEvent(event: DownloadEvent) {
   downloading.value = false
 }
 
+async function refreshUpdateInfo() {
+  const update = await check()
+  updateInfo.value = update ? markRaw(update) : null
+  return updateInfo.value
+}
+
 async function checkForUpdate(options: CheckForUpdateOptions = {}) {
   if (!shouldCheckForUpdate()) {
     if (options.notify) {
@@ -61,7 +67,7 @@ async function checkForUpdate(options: CheckForUpdateOptions = {}) {
   checking.value = true
 
   try {
-    updateInfo.value = await check()
+    await refreshUpdateInfo()
 
     if (options.notify) {
       showAppNotice(
@@ -95,6 +101,7 @@ async function installUpdate() {
     return
   }
 
+  const update = updateInfo.value
   installing.value = true
   downloading.value = true
   downloadedBytes.value = 0
@@ -102,28 +109,46 @@ async function installUpdate() {
 
   showAppNotice({
     title: '开始更新',
-    message: `正在下载 ${updateInfo.value.version}`,
+    message: `正在下载 ${update.version}`,
   })
 
   try {
-    await updateInfo.value.downloadAndInstall(handleDownloadEvent)
+    await update.downloadAndInstall(handleDownloadEvent)
 
     showAppNotice({
       title: '更新完成',
       message: '即将重启应用完成安装',
     })
-
-    await relaunch()
+    updateInfo.value = null
   } catch (error) {
     console.error('安装更新失败', error)
     showAppNotice({
       title: '更新失败',
-      message: formatUpdateError(error),
+      message: `${formatUpdateError(error)}，可重新点击更新按钮重试`,
       tone: 'warning',
     })
+
+    try {
+      // 失败后刷新 Update resource，避免下次重试复用已失败的原生资源。
+      await refreshUpdateInfo()
+    } catch (checkError) {
+      console.error('刷新更新信息失败', checkError)
+    }
+    return
   } finally {
     downloading.value = false
     installing.value = false
+  }
+
+  try {
+    await relaunch()
+  } catch (error) {
+    console.error('重启应用失败', error)
+    showAppNotice({
+      title: '重启失败',
+      message: '更新已安装，请手动重启应用',
+      tone: 'warning',
+    })
   }
 }
 
