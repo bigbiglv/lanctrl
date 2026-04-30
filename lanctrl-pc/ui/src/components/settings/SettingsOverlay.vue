@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { getVersion } from '@tauri-apps/api/app'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { ArrowLeft, Check, Minimize2, Moon, Palette, Power, Sun } from 'lucide-vue-next'
+import { ArrowLeft, Check, Info, LoaderCircle, Minimize2, Moon, Palette, Power, RefreshCw, Sun } from 'lucide-vue-next'
 import { gsap } from 'gsap'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Button } from '../ui/button/index'
 import { useTheme } from '../../composables/use-theme'
+import { useUpdater } from '../../composables/use-updater'
 
 interface SourceRect {
   left: number
@@ -30,6 +32,7 @@ const emit = defineEmits<{
 }>()
 
 const { mode, setThemeMode } = useTheme()
+const { updateInfo, hasUpdate, checking, installing, downloadProgress, checkForUpdate, installUpdate } = useUpdater()
 
 const overlayRef = ref<HTMLElement | null>(null)
 const contentRef = ref<HTMLElement | null>(null)
@@ -39,6 +42,7 @@ const closeToTrayOnClose = ref(true)
 const closeBehaviorPending = ref(false)
 const launchOnStartup = ref(false)
 const startupBehaviorPending = ref(false)
+const appVersion = ref('读取中')
 
 const modeOptions = computed(() => [
   {
@@ -54,6 +58,22 @@ const modeOptions = computed(() => [
     icon: Moon,
   },
 ])
+
+const updateStatusText = computed(() => {
+  if (installing.value) {
+    return downloadProgress.value !== null ? `正在更新 ${downloadProgress.value}%` : '正在更新'
+  }
+
+  if (hasUpdate.value) {
+    return `发现新版本 ${updateInfo.value?.version}`
+  }
+
+  return '当前版本'
+})
+
+const appVersionDisplay = computed(() => {
+  return /^\d+\.\d+\.\d+/.test(appVersion.value) ? `v${appVersion.value}` : appVersion.value
+})
 
 function getSourceRect(): SourceRect {
   if (props.sourceRect) {
@@ -199,6 +219,23 @@ async function loadStartupBehavior() {
   launchOnStartup.value = behavior.launchOnStartup
 }
 
+async function loadAppVersion() {
+  if (!isTauri()) {
+    appVersion.value = '开发模式'
+    return
+  }
+
+  try {
+    appVersion.value = await getVersion()
+  } catch {
+    appVersion.value = '未知版本'
+  }
+}
+
+async function manualCheckForUpdate() {
+  await checkForUpdate({ notify: true })
+}
+
 async function toggleCloseBehavior() {
   if (closeBehaviorPending.value) {
     return
@@ -254,7 +291,7 @@ onMounted(async () => {
   document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncOverlaySize)
-  await Promise.allSettled([loadCloseBehavior(), loadStartupBehavior()])
+  await Promise.allSettled([loadCloseBehavior(), loadStartupBehavior(), loadAppVersion()])
   await nextTick()
   animateOpen()
 })
@@ -388,6 +425,53 @@ onBeforeUnmount(() => {
                       :class="launchOnStartup ? 'translate-x-[1.3rem]' : 'translate-x-0'"></span>
               </span>
             </button>
+          </article>
+        </section>
+        <section class="max-w-260 mx-auto mt-4">
+          <article class="border border-[color-mix(in_oklab,var(--border)_70%,transparent)] rounded-3xl bg-[color-mix(in_oklab,var(--card)_88%,transparent)] p-5">
+            <div class="flex items-start gap-3.5">
+              <span class="inline-flex items-center justify-center shrink-0 w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--primary)_14%,transparent)] text-primary">
+                <Info class="size-5" />
+              </span>
+              <div>
+                <h4 class="font-display text-[1.08rem] font-semibold">关于</h4>
+                <p class="mt-1 text-muted-foreground text-sm leading-relaxed">查看当前版本并手动检查更新。</p>
+              </div>
+            </div>
+
+            <div class="grid gap-3 mt-5">
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 w-full min-h-18 border border-[color-mix(in_oklab,var(--border)_82%,transparent)] rounded-2xl bg-[color-mix(in_oklab,var(--background)_74%,transparent)] px-4 py-3.5">
+                <span class="grid gap-1 min-w-0">
+                  <strong class="text-[0.96rem] font-normal">当前版本</strong>
+                  <span class="text-muted-foreground text-[0.84rem]">{{ updateStatusText }}</span>
+                </span>
+                <span class="text-sm font-medium tabular-nums text-foreground">{{ appVersionDisplay }}</span>
+              </div>
+
+              <div class="flex flex-col sm:flex-row gap-3">
+                <Button
+                  variant="outline"
+                  class="justify-center rounded-2xl min-h-11 transition-all duration-180 ease-out hover:-translate-y-[1px] disabled:cursor-wait disabled:opacity-75 disabled:transform-none"
+                  :disabled="checking || installing"
+                  @click="manualCheckForUpdate"
+                >
+                  <LoaderCircle v-if="checking" class="size-4 animate-spin" />
+                  <RefreshCw v-else class="size-4" />
+                  <span>{{ checking ? '检查中' : '检查更新' }}</span>
+                </Button>
+
+                <Button
+                  v-if="hasUpdate"
+                  class="justify-center rounded-2xl min-h-11 transition-all duration-180 ease-out hover:-translate-y-[1px] disabled:cursor-wait disabled:opacity-75 disabled:transform-none"
+                  :disabled="installing"
+                  @click="installUpdate"
+                >
+                  <LoaderCircle v-if="installing" class="size-4 animate-spin" />
+                  <RefreshCw v-else class="size-4" />
+                  <span>{{ installing ? '更新中' : '立即更新' }}</span>
+                </Button>
+              </div>
+            </div>
           </article>
         </section>
       </main>

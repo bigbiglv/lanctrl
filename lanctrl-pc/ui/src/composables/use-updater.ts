@@ -10,6 +10,10 @@ const installing = ref(false)
 const downloadedBytes = ref(0)
 const totalBytes = ref<number | null>(null)
 
+interface CheckForUpdateOptions {
+  notify?: boolean
+}
+
 function isTauriRuntime() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
@@ -38,8 +42,19 @@ function handleDownloadEvent(event: DownloadEvent) {
   downloading.value = false
 }
 
-async function checkForUpdate() {
-  if (!shouldCheckForUpdate() || checking.value || installing.value) {
+async function checkForUpdate(options: CheckForUpdateOptions = {}) {
+  if (!shouldCheckForUpdate()) {
+    if (options.notify) {
+      showAppNotice({
+        title: '检查更新',
+        message: '开发模式不会检查线上更新',
+        tone: 'warning',
+      })
+    }
+    return
+  }
+
+  if (checking.value || installing.value) {
     return
   }
 
@@ -47,8 +62,29 @@ async function checkForUpdate() {
 
   try {
     updateInfo.value = await check()
+
+    if (options.notify) {
+      showAppNotice(
+        updateInfo.value
+          ? {
+              title: '发现新版本',
+              message: `可更新到 ${updateInfo.value.version}`,
+            }
+          : {
+              title: '检查完成',
+              message: '当前已是最新版本',
+            },
+      )
+    }
   } catch (error) {
     console.error('检查更新失败', error)
+    if (options.notify) {
+      showAppNotice({
+        title: '检查失败',
+        message: formatUpdateError(error),
+        tone: 'warning',
+      })
+    }
   } finally {
     checking.value = false
   }
