@@ -53,6 +53,12 @@ fn collect_network_profile() -> Result<(Vec<IpAddr>, Option<String>), Box<dyn st
     Ok((ip_addresses, broadcast_address))
 }
 
+pub fn local_lan_ip_addresses() -> Vec<IpAddr> {
+    collect_network_profile()
+        .map(|(ip_addresses, _)| ip_addresses)
+        .unwrap_or_default()
+}
+
 fn primary_mac_address() -> Option<String> {
     match get_mac_address() {
         Ok(Some(address)) => Some(address.to_string()),

@@ -58,6 +58,14 @@ struct StartupBehavior {
     launch_on_startup: bool,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WebConsoleStatus {
+    running: bool,
+    port: Option<u16>,
+    urls: Vec<String>,
+}
+
 fn current_mdns_enabled() -> bool {
     let store = store::GLOBAL_STORE.lock().unwrap();
     store.data.mdns_enabled
@@ -67,6 +75,7 @@ fn apply_mdns_enabled(
     runtime: &MdnsRuntime,
     device_id: &str,
     device_name: &str,
+    port: u16,
     enabled: bool,
 ) -> Result<(), String> {
     if enabled {
@@ -75,7 +84,7 @@ fn apply_mdns_enabled(
             return Ok(());
         }
 
-        let next = network::mdns::start_mdns(device_id, device_name, 3000)
+        let next = network::mdns::start_mdns(device_id, device_name, port)
             .map_err(|error| error.to_string())?;
         *daemon = Some(next);
         return Ok(());
@@ -91,6 +100,30 @@ fn apply_mdns_enabled(
     }
 
     Ok(())
+}
+
+fn web_console_status_value() -> WebConsoleStatus {
+    let port = network::server::current_web_port();
+    let urls = port
+        .map(|port| {
+            let mut addresses = network::mdns::local_lan_ip_addresses()
+                .into_iter()
+                .map(|ip| format!("{}:{}/web", ip, port))
+                .collect::<Vec<_>>();
+
+            if addresses.is_empty() {
+                addresses.push(format!("127.0.0.1:{}/web", port));
+            }
+
+            addresses
+        })
+        .unwrap_or_default();
+
+    WebConsoleStatus {
+        running: port.is_some(),
+        port,
+        urls,
+    }
 }
 
 #[tauri::command]
@@ -119,6 +152,11 @@ fn get_mdns_status() -> MdnsStatus {
     MdnsStatus {
         enabled: current_mdns_enabled(),
     }
+}
+
+#[tauri::command]
+fn get_web_console_status() -> WebConsoleStatus {
+    web_console_status_value()
 }
 
 #[tauri::command]
@@ -301,7 +339,8 @@ fn set_mdns_enabled(
         (store.data.device_id.clone(), store.data.device_name.clone())
     };
 
-    apply_mdns_enabled(runtime.inner(), &device_id, &device_name, enabled)?;
+    let port = network::server::current_web_port().unwrap_or(3000);
+    apply_mdns_enabled(runtime.inner(), &device_id, &device_name, port, enabled)?;
     let status = MdnsStatus { enabled };
     let _ = app.emit("mdns_status_changed", &status);
     Ok(status)
@@ -366,6 +405,7 @@ pub fn run() {
             get_clients_with_status,
             get_pending_tasks,
             get_task_history_entries,
+            get_web_console_status,
             get_mdns_status,
             set_mdns_enabled,
             get_close_behavior,
@@ -397,18 +437,41 @@ pub fn run() {
                 create_main_window(app.handle())?;
             }
 
-            let (device_id, device_name, mdns_enabled) = {
-                let store = store::GLOBAL_STORE.lock().unwrap();
-                (
-                    store.data.device_id.clone(),
-                    store.data.device_name.clone(),
-                    store.data.mdns_enabled,
-                )
-            };
-
             let tauri_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                network::server::start_server(3000, tauri_app).await;
+                match network::server::start_server(3000, tauri_app.clone()).await {
+                    Ok(port) => {
+                        let (device_id, device_name, mdns_enabled) = {
+                            let store = store::GLOBAL_STORE.lock().unwrap();
+                            (
+                                store.data.device_id.clone(),
+                                store.data.device_name.clone(),
+                                store.data.mdns_enabled,
+                            )
+                        };
+
+                        if mdns_enabled {
+                            let runtime = tauri_app.state::<MdnsRuntime>();
+                            if let Err(error) = apply_mdns_enabled(
+                                runtime.inner(),
+                                &device_id,
+                                &device_name,
+                                port,
+                                true,
+                            ) {
+                                log::error!("Failed to start mDNS: {}", error);
+                            }
+                        }
+
+                        let _ = tauri_app.emit(
+                            "web_console_status_changed",
+                            web_console_status_value(),
+                        );
+                    }
+                    Err(error) => {
+                        log::error!("Failed to start Axum server: {}", error);
+                    }
+                }
             });
 
             let cleanup_app = app.handle().clone();
@@ -421,11 +484,6 @@ pub fn run() {
                     cleanup_stale_presence(&cleanup_app, 20_000);
                 }
             });
-
-            if mdns_enabled {
-                let runtime = app.state::<MdnsRuntime>();
-                apply_mdns_enabled(runtime.inner(), &device_id, &device_name, true)?;
-            }
 
             Ok(())
         })

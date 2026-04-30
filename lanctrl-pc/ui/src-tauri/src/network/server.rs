@@ -44,6 +44,7 @@ lazy_static! {
         Arc::new(Mutex::new(StdHashMap::new()));
     static ref WEB_CONNECTIONS: Arc<Mutex<StdHashMap<String, mpsc::UnboundedSender<WebServerEvent>>>> =
         Arc::new(Mutex::new(StdHashMap::new()));
+    static ref WEB_SERVER_PORT: Arc<Mutex<Option<u16>>> = Arc::new(Mutex::new(None));
 }
 
 #[derive(Clone)]
@@ -297,7 +298,11 @@ pub struct ClientInfo {
     pub is_connected: bool,
 }
 
-pub async fn start_server(port: u16, tauri_app: AppHandle) {
+pub fn current_web_port() -> Option<u16> {
+    *WEB_SERVER_PORT.lock().unwrap()
+}
+
+pub async fn start_server(port: u16, tauri_app: AppHandle) -> Result<u16, String> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -336,21 +341,45 @@ pub async fn start_server(port: u16, tauri_app: AppHandle) {
         .with_state(state)
         .into_make_service_with_connect_info::<SocketAddr>();
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    log::info!("Axum server listening on {}", addr);
+    let mut listener = None;
+    let mut selected_port = port;
 
-    match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => {
-            tokio::spawn(async move {
-                if let Err(error) = axum::serve(listener, app).await {
-                    log::error!("Axum server error: {}", error);
-                }
-            });
-        }
-        Err(error) => {
-            log::error!("Failed to bind Axum to port {}: {}", port, error);
+    for candidate_port in port..=u16::MAX {
+        let addr = SocketAddr::from(([0, 0, 0, 0], candidate_port));
+        match tokio::net::TcpListener::bind(addr).await {
+            Ok(candidate_listener) => {
+                listener = Some(candidate_listener);
+                selected_port = candidate_port;
+                break;
+            }
+            Err(error) => {
+                log::warn!(
+                    "Failed to bind Axum to port {}: {}. Trying next port.",
+                    candidate_port,
+                    error
+                );
+            }
         }
     }
+
+    let Some(listener) = listener else {
+        return Err(format!("No available port found from {} to {}", port, u16::MAX));
+    };
+
+    {
+        let mut web_server_port = WEB_SERVER_PORT.lock().unwrap();
+        *web_server_port = Some(selected_port);
+    }
+
+    log::info!("Axum server listening on 0.0.0.0:{}", selected_port);
+
+    tokio::spawn(async move {
+        if let Err(error) = axum::serve(listener, app).await {
+            log::error!("Axum server error: {}", error);
+        }
+    });
+
+    Ok(selected_port)
 }
 
 fn current_timestamp_ms() -> u64 {
