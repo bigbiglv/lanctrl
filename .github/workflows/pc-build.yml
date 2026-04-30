@@ -55,16 +55,16 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 8
+          version: 9
 
       - name: Install Frontend Dependencies
-        run: pnpm install
-        working-directory: ./lanctrl-pc/lanctrl-ui
+        run: pnpm install --frozen-lockfile
+        working-directory: ./lanctrl-pc/ui
 
       - name: Set Tauri Version
         shell: pwsh
         run: |
-          $configPath = "lanctrl-pc/lanctrl-ui/src-tauri/tauri.conf.json"
+          $configPath = "lanctrl-pc/ui/src-tauri/tauri.conf.json"
           $config = Get-Content -Raw $configPath | ConvertFrom-Json
           $config.version = "0.1.${{ github.run_number }}"
           $config | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $configPath
@@ -84,7 +84,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: lanctrl-pc/lanctrl-ui
+          projectPath: lanctrl-pc/ui
           tauriScript: pnpm tauri
           tagName: pc-v__VERSION__
           releaseName: LanCtrl PC v__VERSION__
