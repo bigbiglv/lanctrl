@@ -12,6 +12,10 @@ use windows::Win32::Media::Audio::{
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    keybd_event, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_VOLUME_MUTE,
+};
 
 #[derive(Debug)]
 pub enum SystemControlError {
@@ -50,9 +54,16 @@ pub fn set_system_volume(level: u8) -> Result<u8, SystemControlError> {
     }
 
     with_audio_endpoint(|endpoint| unsafe {
+        if level > 0 {
+            set_endpoint_mute(&endpoint, false)?;
+        }
+
         endpoint
             .SetMasterVolumeLevelScalar(level as f32 / 100.0, std::ptr::null())
             .map_err(|error| SystemControlError::WindowsApi(format!("设置音量失败: {error}")))?;
+
+        // Windows 将音量数值和静音开关分开保存，远端指令也需要显式同步静音状态。
+        set_endpoint_mute(&endpoint, level == 0)?;
         Ok(level)
     })
 }
@@ -144,6 +155,47 @@ fn with_audio_endpoint<T>(
     }
 
     result
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn set_endpoint_mute(
+    endpoint: &IAudioEndpointVolume,
+    muted: bool,
+) -> Result<(), SystemControlError> {
+    endpoint
+        .SetMute(muted, std::ptr::null())
+        .map_err(|error| SystemControlError::WindowsApi(format!("设置静音状态失败: {error}")))?;
+
+    if endpoint_mute_state(endpoint)? == muted {
+        return Ok(());
+    }
+
+    // 某些远端触发场景下 Core Audio 接受调用但系统静音开关未变化，兜底模拟一次系统静音键。
+    keybd_event(VK_VOLUME_MUTE.0 as u8, 0, KEYEVENTF_EXTENDEDKEY, 0);
+    keybd_event(
+        VK_VOLUME_MUTE.0 as u8,
+        0,
+        KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP,
+        0,
+    );
+    std::thread::sleep(std::time::Duration::from_millis(80));
+
+    let actual = endpoint_mute_state(endpoint)?;
+    if actual == muted {
+        Ok(())
+    } else {
+        Err(SystemControlError::WindowsApi(format!(
+            "静音状态未生效，期望: {muted}，实际: {actual}"
+        )))
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn endpoint_mute_state(endpoint: &IAudioEndpointVolume) -> Result<bool, SystemControlError> {
+    endpoint
+        .GetMute()
+        .map(|value| value.as_bool())
+        .map_err(|error| SystemControlError::WindowsApi(format!("读取静音状态失败: {error}")))
 }
 
 #[cfg(not(target_os = "windows"))]

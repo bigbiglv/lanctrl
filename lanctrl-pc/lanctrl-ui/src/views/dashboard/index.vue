@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { CircleHelp, Gamepad2, Keyboard, Mouse, Usb } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Badge } from '../../components/ui/badge/index'
 import {
   Card,
   CardContent,
@@ -17,26 +17,80 @@ let unlistenDeviceChanged: (() => void) | null = null
 const mockDevices: PeripheralDevice[] = [
   { id: 'kb-01', classType: 'keyboard', name: 'MX Mechanical', status: 'ok' },
   { id: 'mouse-01', classType: 'mouse', name: 'MX Master 3S', status: 'ok' },
+  { id: 'gamepad-01', classType: 'hidclass', name: 'Xbox Wireless Controller', status: 'ok' },
   { id: 'usb-01', classType: 'usb', name: 'USB-C Dock', status: 'warning' },
-  { id: 'audio-01', classType: 'usb', name: 'Studio DAC', status: 'ok' },
+  { id: 'audio-01', classType: 'media', name: 'Studio DAC', status: 'ok' },
 ]
-const featuredDevices = computed(() => devices.value.slice(0, 6))
 
-function getDeviceLabel(classType: string | null | undefined) {
-  switch ((classType || '').toLowerCase()) {
-    case 'keyboard':
-      return '键盘'
-    case 'mouse':
-      return '鼠标'
-    case 'usb':
-      return 'USB'
-    default:
-      return '通用设备'
-  }
+type DeviceCategory = 'keyboard' | 'mouse' | 'controller' | 'usb' | 'other'
+
+const categoryOrder: Record<DeviceCategory, number> = {
+  keyboard: 0,
+  mouse: 1,
+  controller: 2,
+  usb: 3,
+  other: 4,
 }
 
-function getStatusVariant(status: string | null | undefined) {
-  return status?.toLowerCase() === 'ok' ? 'default' : 'secondary'
+const categoryMeta = {
+  keyboard: { label: '键盘', icon: Keyboard },
+  mouse: { label: '鼠标', icon: Mouse },
+  controller: { label: '控制器', icon: Gamepad2 },
+  usb: { label: 'USB', icon: Usb },
+  other: { label: '其他', icon: CircleHelp },
+} satisfies Record<DeviceCategory, { label: string, icon: unknown }>
+
+const visibleDevices = computed(() =>
+  [...devices.value].sort((left, right) => {
+    const leftCategory = getDeviceCategory(left)
+    const rightCategory = getDeviceCategory(right)
+    if (leftCategory !== rightCategory) {
+      return categoryOrder[leftCategory] - categoryOrder[rightCategory]
+    }
+
+    return (left.name || '').localeCompare(right.name || '', 'zh-CN')
+  }),
+)
+
+function getDeviceCategory(device: PeripheralDevice): DeviceCategory {
+  const classType = (device.classType || '').toLowerCase()
+  const name = (device.name || '').toLowerCase()
+  const id = (device.id || '').toLowerCase()
+  const fingerprint = `${classType} ${name} ${id}`
+
+  switch (classType) {
+    case 'keyboard':
+      return 'keyboard'
+    case 'mouse':
+      return 'mouse'
+    case 'usb':
+      return 'usb'
+    default:
+      break
+  }
+
+  // HID 设备里控制器、键盘、鼠标都很常见，需要结合名称和实例 ID 再分类。
+  if (/(gamepad|controller|joystick|xbox|dualshock|dualsense|手柄|控制器)/i.test(fingerprint)) {
+    return 'controller'
+  }
+  if (/(keyboard|键盘)/i.test(fingerprint)) {
+    return 'keyboard'
+  }
+  if (/(mouse|mice|鼠标)/i.test(fingerprint)) {
+    return 'mouse'
+  }
+  if (classType === 'hidclass' || id.startsWith('hid\\')) {
+    return 'other'
+  }
+  if (id.startsWith('usb\\') || fingerprint.includes('usb')) {
+    return 'usb'
+  }
+
+  return 'other'
+}
+
+function getDeviceMeta(device: PeripheralDevice) {
+  return categoryMeta[getDeviceCategory(device)]
 }
 
 onMounted(async () => {
@@ -83,32 +137,33 @@ onUnmounted(async () => {
 
           </div>
         </CardHeader>
-        <CardContent class="grid gap-4 md:grid-cols-2">
+        <CardContent class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <article
-            v-for="device in featuredDevices"
+            v-for="device in visibleDevices"
             :key="device.id"
             class="rounded-[1.5rem] border border-border/70 bg-background/70 p-5 transition-transform duration-200 hover:-translate-y-0.5"
           >
-            <div class="mb-4 flex items-start justify-between gap-3">
-              <div>
+            <div class="flex flex-col gap-5">
+              <div class="flex size-16 items-center justify-center rounded-[1.25rem] border border-border/70 bg-accent/60 text-primary">
+                <component :is="getDeviceMeta(device).icon" class="size-9" />
+              </div>
+
+              <div class="space-y-2">
                 <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  {{ getDeviceLabel(device.classType) }}
+                  {{ getDeviceMeta(device).label }}
                 </p>
-                <h3 class="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">
+                <h3 class="text-lg font-semibold tracking-[-0.02em] text-foreground">
                   {{ device.name || '未命名设备' }}
                 </h3>
+                <p class="text-sm leading-6 text-muted-foreground">
+                  设备 ID：{{ device.id.slice(0, 12) }}{{ device.id.length > 12 ? '…' : '' }}
+                </p>
               </div>
-              <Badge :variant="getStatusVariant(device.status)">
-                {{ device.status?.toLowerCase() === 'ok' ? '正常' : '待检查' }}
-              </Badge>
             </div>
-            <p class="text-sm leading-6 text-muted-foreground">
-              设备 ID：{{ device.id.slice(0, 12) }}{{ device.id.length > 12 ? '…' : '' }}
-            </p>
           </article>
 
           <div
-            v-if="featuredDevices.length === 0"
+            v-if="visibleDevices.length === 0"
             class="col-span-full rounded-[1.5rem] border border-dashed border-border/80 bg-muted/40 px-6 py-12 text-center text-sm text-muted-foreground"
           >
             暂未检测到可展示的设备信息。

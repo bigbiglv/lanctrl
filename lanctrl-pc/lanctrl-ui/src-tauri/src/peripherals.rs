@@ -37,11 +37,11 @@ pub fn stop_watcher(state: &WatcherState) {
 fn fetch_devices() -> Result<Vec<PeripheralDevice>, String> {
     let mut cmd = Command::new("powershell");
 
-    // Quick PnP parsing for Keyboard, Mouse, and generic USB ports.
+    // Pull common external-device classes, then let the UI normalize them into display buckets.
     cmd.args(&[
         "-NoProfile",
         "-Command",
-        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-PnpDevice -Class Keyboard, Mouse, USB -PresentOnly | Select-Object InstanceId, Class, FriendlyName, Status | ConvertTo-Json -Compress"
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.FriendlyName -and ($_.Class -in @('Keyboard','Mouse','USB','HIDClass','Bluetooth','MEDIA','Image','Camera','SmartCardReader','WPD','Ports') -or $_.InstanceId -like 'USB\\*' -or $_.InstanceId -like 'HID\\*' -or $_.FriendlyName -match '(keyboard|mouse|gamepad|controller|joystick|usb|键盘|鼠标|手柄|控制器)') } | Select-Object InstanceId, Class, FriendlyName, Status | ConvertTo-Json -Compress"
     ]);
 
     #[cfg(target_os = "windows")]
