@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:web": "npm --prefix ../lanctrl-web ci && npm --prefix ../lanctrl-web run build",
+    "build:web": "npm --prefix ../web ci && npm --prefix ../web run build",
     "build": "npm run build:web && vue-tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

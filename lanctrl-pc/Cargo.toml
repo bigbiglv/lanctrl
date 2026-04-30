@@ -1,16 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
-    "lanctrl-service",
-    "lanctrl-transport",
-    "lanctrl-auth",
-    "lanctrl-control",
-    "lanctrl-scheduler",
-    "lanctrl-share",
-    "lanctrl-storage",
-    "lanctrl-discovery",
-    "lanctrl-common",
-    "lanctrl-ui/src-tauri",
+    "service",
+    "transport",
+    "auth",
+    "control",
+    "scheduler",
+    "share",
+    "storage",
+    "discovery",
+    "common",
+    "ui/src-tauri",
 ]
 
 [profile.dev]

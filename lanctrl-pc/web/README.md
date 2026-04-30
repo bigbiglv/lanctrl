@@ -12,5 +12,5 @@ npm run dev
 npm run build
 ```
 
-PC 打包时会通过 `lanctrl-ui` 的 `build:web` 脚本先构建本项目，再由 Rust 在编译期嵌入 `dist/index.html`、`dist/assets/main.js` 和 `dist/assets/style.css`。
+PC 打包时会通过 `ui` 的 `build:web` 脚本先构建本项目，再由 Rust 在编译期嵌入 `dist/index.html`、`dist/assets/main.js` 和 `dist/assets/style.css`。
 

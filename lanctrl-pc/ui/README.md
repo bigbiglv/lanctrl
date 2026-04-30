@@ -10,7 +10,7 @@ LanCtrl PC 端桌面应用，基于 Tauri 2.0 和 Vue 3 开发。
 
 ## 运行项目
 
-在 `lanctrl-pc/lanctrl-ui` 目录下执行：
+在 `lanctrl-pc/ui` 目录下执行：
 
 1. **安装依赖**:
    ```bash
